@@ -1,0 +1,47 @@
+import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { CreateUserDto } from '../dto/create-user.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { User } from '../entities/user.entity';
+import { UserService } from '../service/user.service';
+
+@ApiTags('Users')
+@Controller('user')
+export class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Створити нового користувача' })
+  @ApiResponse({ status: 201, description: 'Користувач успішно створений', type: User })
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.userService.create(createUserDto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Отримати список всіх користувачів' })
+  @ApiResponse({ status: 200, description: 'Список користувачів', type: [User] })
+  findAll() {
+    return this.userService.findAll();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Отримати користувача за ID' })
+  @ApiResponse({ status: 200, description: 'Користувач знайдений', type: User })
+  findOne(@Param('id') id: string) {
+    return this.userService.findOne(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Оновити користувача' })
+  @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.userService.update(id, updateUserDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Видалити користувача' })
+  @ApiResponse({ status: 200, description: 'Користувач успішно видалений', type: User })
+  remove(@Param('id') id: string) {
+    return this.userService.remove(id);
+  }
+}
