@@ -12,8 +12,8 @@ import { LocalStrategy } from './strategies/local.strategy';
   imports: [
     UserModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '1h' },
+      secret: process.env.JWT_SECRET_TOKEN,
+      signOptions: { expiresIn: process.env.EXPIRATION_TIME_FOR_ACCESS_TOKEN },
     }),],
   providers: [
     AuthService,

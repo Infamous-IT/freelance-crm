@@ -16,13 +16,13 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '1h',
-      secret: process.env.JWT_SECRET,
+      expiresIn: process.env.EXPIRATION_TIME_FOR_ACCESS_TOKEN,
+      secret: process.env.JWT_SECRET_TOKEN,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: '7d',
-      secret: process.env.JWT_SECRET,
+      expiresIn: process.env.EXPIRATION_TIME_FOR_REFRESH_TOKEN,
+      secret: process.env.JWT_REFRESH_TOKEN,
     });
 
     return {
@@ -34,7 +34,7 @@ export class AuthService {
   async validateAccessToken(token: string) {
     try {
       return this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET,
+        secret: process.env.JWT_SECRET_TOKEN,
       });
     } catch (error) {
       return null;

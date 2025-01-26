@@ -10,13 +10,13 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     private readonly authService: AuthService,
     private readonly userService: UserService,
   ) {
-    super({ usernameField: 'username' });
+    super({ usernameField: 'email' });
   }
 
-  async validate(username: string, password: string) {
-    const user = await this.userService.findByEmail(username);
+  async validate(email: string, password: string) {
+    const user = await this.userService.findByEmail(email);
     if (!user || !(await this.authService.comparePassword(password, user.password))) {
-      throw new Error('Invalid credentials');
+      throw new Error('Невірні дані');
     }
     return user;
   }
