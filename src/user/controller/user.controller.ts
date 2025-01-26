@@ -31,6 +31,13 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
+  @Get('orders/:userId')
+  @ApiOperation({ summary: 'Отримати замовлення користувача за його ID' })
+  @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
+  getUserOrderWithUser(@Param('userId') userId: string) {
+    return this.userService.getUserOrderWithUser(userId);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Оновити користувача' })
   @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })

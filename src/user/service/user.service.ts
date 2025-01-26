@@ -34,6 +34,19 @@ export class UserService {
     return user;
   }
 
+  async getUserOrderWithUser(userId: string) {
+    const userWithOrders = await this.prisma.user.findUnique({
+      where: { 
+        id: userId
+       },
+      include: {
+        orders: true
+      },
+    });
+    
+    return userWithOrders;
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     const user = await this.prisma.user.update({
       where: { id },
