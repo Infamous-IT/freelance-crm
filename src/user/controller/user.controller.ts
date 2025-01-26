@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
@@ -20,6 +21,7 @@ export class UserController {
   @Get()
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів', type: [User] })
+  @UseGuards(AuthGuard('jwt'))
   findAll() {
     return this.userService.findAll();
   }
@@ -27,6 +29,7 @@ export class UserController {
   @Get(':id')
   @ApiOperation({ summary: 'Отримати користувача за ID' })
   @ApiResponse({ status: 200, description: 'Користувач знайдений', type: User })
+  @UseGuards(AuthGuard('jwt'))
   findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
   }
@@ -34,6 +37,7 @@ export class UserController {
   @Get('orders/:userId')
   @ApiOperation({ summary: 'Отримати замовлення користувача за його ID' })
   @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
+  @UseGuards(AuthGuard('jwt'))
   getUserOrderWithUser(@Param('userId') userId: string) {
     return this.userService.getUserOrderWithUser(userId);
   }
@@ -41,6 +45,7 @@ export class UserController {
   @Patch(':id')
   @ApiOperation({ summary: 'Оновити користувача' })
   @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })
+  @UseGuards(AuthGuard('jwt'))
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.userService.update(id, updateUserDto);
   }
@@ -48,6 +53,7 @@ export class UserController {
   @Delete(':id')
   @ApiOperation({ summary: 'Видалити користувача' })
   @ApiResponse({ status: 200, description: 'Користувач успішно видалений', type: User })
+  @UseGuards(AuthGuard('jwt'))
   remove(@Param('id') id: string) {
     return this.userService.remove(id);
   }

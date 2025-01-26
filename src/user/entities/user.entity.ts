@@ -25,7 +25,7 @@ export class User {
         description: 'Країна проживання користувача',
         required: false,
       })
-    country?: string;
+    country: string | null;
 
     @ApiProperty({
         example: 'nazar.hlukhaniuk@example.com',
@@ -43,7 +43,7 @@ export class User {
         example: true,
         description: 'Статус підтвердження електронної пошти',
       })
-    isEmailVerified?: boolean;
+    isEmailVerified: boolean | null;
 
     @ApiProperty({
         example: '2025-01-01',
