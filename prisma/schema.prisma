@@ -26,6 +26,7 @@ model Order {
   id               String       @id @default(uuid())
   title            String
   description      String
+  price            Decimal      @default(0)
   startDate        DateTime
   endDate          DateTime
   category         Category
