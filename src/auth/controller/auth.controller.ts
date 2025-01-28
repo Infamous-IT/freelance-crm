@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { UserService } from 'src/user/service/user.service';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
@@ -35,10 +35,39 @@ export class AuthController {
     const user = await this.userService.findOne(payload.sub);
     return this.authService.generateTokens(user);
   }
-
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  logout() {
-    return { message: 'Logout successful' };
+  async logout(@Req() req: any) {
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    await this.authService.revokeAccessToken(accessToken);
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
+    return { message: 'Ви успішно вийшли з системи.' };
+  }
+  
+  @Post('verify-email')
+  async verifyEmail(@Body() body: { email: string; code: string }) {
+    return this.authService.verifyEmail(body.email, body.code);
+  }
+
+  @Post('send-verification-code')
+  async sendVerificationCode(@Body() body: { email: string }) {
+    await this.authService.sendVerificationCode(body.email);
+    return { message: 'Код успішно відправлено на електронну пошту' };
+  }
+
+  @Post('forgot-password')
+  async sendForgotPassword(@Body() body: { email: string }) {
+    return this.authService.sendForgotPassword(body.email);
+  }
+
+  @Post('update-password')
+  async updateForgotPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+    return this.authService.updateForgotPassword(body.email, body.code, body.newPassword);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  async changePassword(@Req() req, @Body() body: { oldPassword: string; newPassword: string }) {
+    return this.authService.changePassword(req.user.id, body.oldPassword, body.newPassword);
   }
 }
