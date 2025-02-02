@@ -30,7 +30,7 @@ export class OrderService {
       this.prisma.order.findMany({
         skip,
         take,
-        include: { customer: true, user: true },
+        include: { customers: true, user: true },
       }),
       this.prisma.order.count(),
     ]);
@@ -46,7 +46,7 @@ export class OrderService {
   async findOne(id: string) {
     return await this.prisma.order.findUnique({
       where: { id },
-      include: { customer: true, user: true },
+      include: { customers: true, user: true },
     });
   }
 

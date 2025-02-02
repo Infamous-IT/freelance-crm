@@ -28,6 +28,9 @@ export class UserService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: {
+        orders: true,
+      }
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
@@ -46,6 +49,27 @@ export class UserService {
     });
     
     return userWithOrders;
+  }
+
+  async getUserOrderWithCustomers(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      include: {
+        customers: true
+      }
+    })
+  }
+
+  async getUserCustomerStats(userId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { userId },
+      include: { customers: true },
+    });
+
+    const uniqueCustomers = new Set(
+      orders.flatMap(order => order.customers?.map(customer => customer.id)).filter(id => id != null)
+    );
+    return uniqueCustomers.size;
   }
 
   async findByEmail(email: string): Promise<User | null> {

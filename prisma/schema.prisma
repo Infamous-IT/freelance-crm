@@ -33,7 +33,8 @@ model Order {
   status           OrderStatus  @default(NEW)
   userId           String
   user             User         @relation(fields: [userId], references: [id])
-  customer         Customer?
+  // customer         Customer?
+  customers        Customer[]
 }
 
 model Customer {
@@ -42,8 +43,8 @@ model Customer {
   email            String?
   telegram         String?
   company          String?
-  orderId          String       @unique
-  order            Order        @relation(fields: [orderId], references: [id])
+  // orderId          String       @unique
+  order            Order[]        //@relation(fields: [orderId], references: [id])
 }
 
 enum Role {

@@ -1,7 +1,9 @@
+import { Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
 import { Category, OrderStatus } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Length, Matches } from "class-validator";
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Length, Matches, ValidateNested } from "class-validator";
+import { CreateCustomerDto } from "src/customer/dto/create-customer.dto";
 
 export class CreateOrderDto {
     @ApiProperty({

@@ -39,7 +39,15 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
   @UseGuards(AuthGuard('jwt'))
   getUserOrderWithUser(@Param('userId') userId: string) {
-    return this.userService.getUserOrderWithUser(userId);
+    return this.userService.getUserOrderWithCustomers(userId);
+  }
+
+  @Get('customer-stats/:userId')
+  @ApiOperation({ summary: 'Отримати статистику по замовниках користувача' })
+  @ApiResponse({ status: 200, description: 'Статистика по замовниках користувача', type: Number })
+  @UseGuards(AuthGuard('jwt'))
+  getUserCustomerStats(@Param('userId') userId: string) {
+    return this.userService.getUserCustomerStats(userId);
   }
 
   @Patch(':id')
