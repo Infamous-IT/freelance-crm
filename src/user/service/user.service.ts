@@ -3,7 +3,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 
 
 @Injectable()
@@ -21,8 +21,43 @@ export class UserService {
     return user;
   }
 
-  async findAll() {
-    return this.prisma.user.findMany();
+  async findAll(
+    page: number = 1,
+    pageSize: number = 20,
+    sortBy: string = 'email',
+    sortOrder: 'asc' | 'desc' = 'asc',
+    filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string } // Додаткові фільтри
+  ) {
+    const skip = (page - 1) * pageSize;
+  
+    const { email, firstName, lastName, country } = filterDto || {};
+  
+    const where: Prisma.UserWhereInput = {
+      ...(email ? { email: { contains: email, mode: 'insensitive' } } : {}),
+      ...(firstName ? { firstName: { contains: firstName, mode: 'insensitive' } } : {}),
+      ...(lastName ? { lastName: { contains: lastName, mode: 'insensitive' } } : {}),
+      ...(country ? { country: { contains: country, mode: 'insensitive' } } : {}),
+    };
+  
+    const orderBy = sortBy ? { [sortBy]: sortOrder } : undefined;
+
+    const users = await this.prisma.user.findMany({
+      where,
+      skip,
+      take: pageSize,
+      orderBy,
+    });
+
+    const totalItems = await this.prisma.user.count({
+      where,
+    });
+  
+    return {
+      data: users,
+      totalItems,
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / pageSize),
+    };
   }
 
   async findOne(id: string) {

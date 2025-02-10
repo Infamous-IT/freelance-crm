@@ -3,7 +3,8 @@ import { createClient } from 'redis';
 
 
 @Global()
-@Module({
+@Module(
+  {
   providers: [
     {
       provide: 'REDIS_CLIENT',

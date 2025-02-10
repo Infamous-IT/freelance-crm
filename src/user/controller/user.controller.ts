@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -22,8 +22,14 @@ export class UserController {
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів', type: [User] })
   @UseGuards(AuthGuard('jwt'))
-  findAll() {
-    return this.userService.findAll();
+  findAll(
+    @Query('page') page: number = 1,
+    @Query('pageSize') pageSize: number = 20,
+    @Query('sortBy') sortBy: string = 'email',
+    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'asc',
+    @Query() filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string },
+  ) {
+    return this.userService.findAll(page, pageSize, sortBy, sortOrder, filterDto);
   }
 
   @Get(':id')
