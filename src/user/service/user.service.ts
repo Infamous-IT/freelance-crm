@@ -1,14 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { Prisma, User } from '@prisma/client';
+import { RedisClientType } from 'redis';
+import { parse } from 'path';
 
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService){}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
+    ){}
 
   async create(createUserDto: CreateUserDto) {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
@@ -18,6 +23,7 @@ export class UserService {
         password: hashedPassword,
       },
     });
+    await this.clearCache();
     return user;
   }
 
@@ -26,8 +32,15 @@ export class UserService {
     pageSize: number = 20,
     sortBy: string = 'email',
     sortOrder: 'asc' | 'desc' = 'asc',
-    filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string } // Додаткові фільтри
+    filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string }
   ) {
+    const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
+    const cachedData = await this.redis.get(cacheKey);
+    if(cachedData) {
+      return JSON.parse(cachedData);
+    }
+
+    pageSize = parseInt(String(pageSize), 10);
     const skip = (page - 1) * pageSize;
   
     const { email, firstName, lastName, country } = filterDto || {};
@@ -39,25 +52,35 @@ export class UserService {
       ...(country ? { country: { contains: country, mode: 'insensitive' } } : {}),
     };
   
-    const orderBy = sortBy ? { [sortBy]: sortOrder } : undefined;
+    const orderBy = { [sortBy]: sortOrder };
 
-    const users = await this.prisma.user.findMany({
-      where,
-      skip,
-      take: pageSize,
-      orderBy,
-    });
+    const [users, totalCount] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
-    const totalItems = await this.prisma.user.count({
-      where,
-    });
-  
-    return {
+    const result = {
       data: users,
-      totalItems,
+      totalCount,
+      totalPages: Math.ceil(totalCount / pageSize),
       currentPage: page,
-      totalPages: Math.ceil(totalItems / pageSize),
     };
+
+    await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
+  
+    return result;
+  }
+
+  async clearCache() {
+    const keys = await this.redis.keys('users:*');
+    if (keys.length > 0) {
+      await this.redis.del(keys);
+    }
   }
 
   async findOne(id: string) {
@@ -120,6 +143,7 @@ export class UserService {
       where: { id },
       data: updateUserDto,
     });
+    await this.clearCache();
     return user;
   }
 
@@ -127,6 +151,7 @@ export class UserService {
     const user = await this.prisma.user.delete({
       where: { id },
     });
+    await this.clearCache();
     return user;
   }
 }
