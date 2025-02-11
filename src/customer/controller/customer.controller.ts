@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Req } from '@nestjs/common';
 import { CustomerService } from '../service/customer.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('Customers')
@@ -63,5 +63,45 @@ export class CustomerController {
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
   remove(@Param('id') id: string) {
     return this.customerService.remove(id);
+  }
+
+  @Get('stats/customer-spending')
+  @ApiOperation({ summary: 'Отримати витрати клієнтів' })
+  @ApiResponse({ status: 200, description: 'Успішно отримано витрати клієнтів' })
+  @UseGuards(AuthGuard('jwt'))
+  getCustomerSpending(@Req() req: any) {
+    return this.customerService.getCustomerSpending(req.user.id, req.user.role === 'ADMIN');
+  }
+
+  @Get('stats/top-spenders')
+  @ApiOperation({ summary: 'Отримати топ клієнтів за витратами' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Кількість клієнтів', example: 5 })
+  @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
+  @UseGuards(AuthGuard('jwt'))
+  getTopCustomersBySpending(@Req() req: any, @Query('limit') limit: number) {
+    const isAdmin = req.user.role === 'ADMIN';
+    console.log('isAdmin:', isAdmin);
+    const customersLimit = Number(limit) || 5;
+    console.log('Customers limit:', customersLimit);
+    return this.customerService.getTopCustomersBySpending(req.user.id, isAdmin, customersLimit);
+  }
+
+  @Get('stats/top-customers/orders')
+  @ApiOperation({ summary: 'Отримати топ клієнтів за кількістю замовлень' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Кількість клієнтів', example: 5 })
+  @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
+  @UseGuards(AuthGuard('jwt'))
+  getTopCustomersByOrders(@Req() req: any, @Query('limit') limit: number) {
+    const userId: string = req.user.id;
+    const isAdmin: boolean = req.user.role === 'ADMIN';
+    return this.customerService.getTopCustomersByOrders(userId, isAdmin, Number(limit) || 5);
+  }
+
+  @Get('stats/customers')
+  @ApiOperation({ summary: 'Отримати статистику клієнтів для поточного користувача' })
+  @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
+  @UseGuards(AuthGuard('jwt'))
+  getUserCustomerStats(@Req() req: any) {
+    return this.customerService.getUserCustomerStats(req.user.id, req.user.role === 'admin');
   }
 }

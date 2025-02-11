@@ -5,8 +5,6 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { Prisma, User } from '@prisma/client';
 import { RedisClientType } from 'redis';
-import { parse } from 'path';
-
 
 @Injectable()
 export class UserService {

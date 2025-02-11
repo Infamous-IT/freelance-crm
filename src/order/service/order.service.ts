@@ -127,6 +127,32 @@ export class OrderService {
     return deletedOrder;
   }
 
+  async getUserOrderStats(userId: string, requestingUserId: string, isAdmin: boolean) {
+    if(!isAdmin && userId !== requestingUserId) {
+      throw new ForbiddenException('У вас немає доступу до даних інших користувачів.');
+    }
+
+    const stats = await this.prisma.order.aggregate({
+      where: { userId },
+      _count: { id: true },
+      _sum: { price: true },
+    });
+
+    return {
+      totalOrders: stats._count.id,
+      totalEarnings: stats._sum.price ?? 0,
+    };
+  }
+
+  async getTopExpensiveOrders(userId: string, isAdmin: boolean, limit: number = 5) {
+    return await this.prisma.order.findMany({
+      where: isAdmin ? {} : { userId },
+      orderBy: { price: 'desc' },
+      take: limit,
+      select: { id: true, title: true, price: true },
+    });
+  }
+
   private convertDateToISO(date: string): string {
     const [day, month, year] = date.split('-').map(Number);
     const formattedDate = new Date(year, month - 1, day);

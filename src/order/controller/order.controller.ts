@@ -55,4 +55,22 @@ export class OrderController {
     const userId = req.user.id;
     return this.orderService.remove(id, userId);
   }
+
+  @Get('stats/user')
+  @ApiOperation({ summary: 'Отримати статистику замовлень для поточного користувача' })
+  @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
+  @UseGuards(AuthGuard('jwt'))
+  getUserOrderStats(@Req() req: any) {
+    return this.orderService.getUserOrderStats(req.user.id, req.user.id, req.user.role === 'ADMIN');
+  }
+
+  @Get('stats/top-expensive')
+  @ApiOperation({ summary: 'Отримати найдорожчі замовлення' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Кількість найдорожчих замовлень', example: 5 })
+  @ApiResponse({ status: 200, description: 'Успішно отримано найдорожчі замовлення' })
+  @UseGuards(AuthGuard('jwt'))
+  getTopExpensiveOrders(@Req() req: any, @Query('limit') limit: number) {
+    const isAdmin = req.user.role === 'ADMIN';
+    return this.orderService.getTopExpensiveOrders(req.user.id, isAdmin, Number(limit) || 5);
+  }
 }
