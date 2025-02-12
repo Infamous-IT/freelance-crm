@@ -6,6 +6,7 @@ import { UserModule } from 'src/user/user.module';
 import { AuthController } from './controller/auth.controller';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { AuthService } from './service/auth.service';
 import { EmailService } from './service/email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -27,7 +28,8 @@ import { LocalStrategy } from './strategies/local.strategy';
     JwtAuthGuard,
     LocalAuthGuard,
     EmailService,
-    PrismaService
+    PrismaService,
+    RolesGuard
   ],
   controllers: [AuthController],
   exports: [AuthService]

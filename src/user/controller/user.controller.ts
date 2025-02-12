@@ -6,6 +6,9 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 import { User } from '../entities/user.entity';
 import { UserService } from '../service/user.service';
 import logger from 'src/logger/logger';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @ApiTags('Users')
 @Controller('user')
@@ -25,7 +28,8 @@ export class UserController {
   @Get()
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів', type: [User] })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
   async findAll(
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 20,
@@ -42,7 +46,8 @@ export class UserController {
   @Get(':id')
   @ApiOperation({ summary: 'Отримати користувача за ID' })
   @ApiResponse({ status: 200, description: 'Користувач знайдений', type: User })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.FREELANCER)
   async findOne(@Param('id') id: string) {
     logger.info(`Received request to find user with ID: ${id}`);
     const user = await this.userService.findOne(id);
@@ -53,7 +58,8 @@ export class UserController {
   @Get('orders/:userId')
   @ApiOperation({ summary: 'Отримати замовлення користувача за його ID' })
   @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.FREELANCER)
   async getUserOrderWithUser(@Param('userId') userId: string) {
     logger.info(`Received request to get orders for user with ID: ${userId}`);
     const orders = await this.userService.getUserOrderWithCustomers(userId);
@@ -64,7 +70,8 @@ export class UserController {
   @Get('customer-stats/:userId')
   @ApiOperation({ summary: 'Отримати статистику по замовниках користувача' })
   @ApiResponse({ status: 200, description: 'Статистика по замовниках користувача', type: Number })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.FREELANCER)
   async getUserCustomerStats(@Param('userId') userId: string) {
     logger.info(`Received request to get customer stats for user with ID: ${userId}`);
     const stats = await this.userService.getUserCustomerStats(userId);
@@ -75,7 +82,8 @@ export class UserController {
   @Patch(':id')
   @ApiOperation({ summary: 'Оновити користувача' })
   @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     logger.info(`Received request to update user with ID: ${id}`);
     const user = await this.userService.update(id, updateUserDto);
@@ -86,7 +94,8 @@ export class UserController {
   @Delete(':id')
   @ApiOperation({ summary: 'Видалити користувача' })
   @ApiResponse({ status: 200, description: 'Користувач успішно видалений', type: User })
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
   async remove(@Param('id') id: string) {
     logger.info(`Received request to delete user with ID: ${id}`);
     const user = await this.userService.remove(id);

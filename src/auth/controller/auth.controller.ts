@@ -5,6 +5,9 @@ import { RegisterDto } from '../dto/register.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import logger from 'src/logger/logger';
 import { AuthService } from '../service/auth.service';
+import { RolesGuard } from '../guards/roles.guard';
+import { Role } from '@prisma/client';
+import { Roles } from '../decorators/roles.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -55,6 +58,8 @@ export class AuthController {
   }
   
   @Post('verify-email')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   async verifyEmail(@Body() body: { email: string; code: string }) {
     logger.info(`Email verification attempt for email: ${body.email}`);
     const result = await this.authService.verifyEmail(body.email, body.code);
@@ -65,6 +70,8 @@ export class AuthController {
   }
 
   @Post('send-verification-code')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   async sendVerificationCode(@Body() body: { email: string }) {
     logger.info(`Sending verification code to email: ${body.email}`);
     await this.authService.sendVerificationCode(body.email);
@@ -89,7 +96,8 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   async changePassword(@Req() req, @Body() body: { oldPassword: string; newPassword: string }) {
     logger.info(`Password change request for user: ${req.user.id}`);
     const result = await this.authService.changePassword(req.user.id, body.oldPassword, body.newPassword);
