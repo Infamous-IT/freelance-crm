@@ -5,6 +5,7 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { Prisma, User } from '@prisma/client';
 import { RedisClientType } from 'redis';
+import logger from 'src/logger/logger';
 
 @Injectable()
 export class UserService {
@@ -14,7 +15,8 @@ export class UserService {
     ){}
 
   async create(createUserDto: CreateUserDto) {
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    try {
+      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const user = await this.prisma.user.create({
       data: {
         ...createUserDto,
@@ -22,7 +24,13 @@ export class UserService {
       },
     });
     await this.clearCache();
+
+    logger.info(`User created: ${user.id} - ${user.email}`);
     return user;
+    } catch (error) {
+      logger.error(`Error when we creating user: ${error.message}`);
+      throw error;
+    };
   }
 
   async findAll(
@@ -35,6 +43,7 @@ export class UserService {
     const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
     const cachedData = await this.redis.get(cacheKey);
     if(cachedData) {
+      logger.info(`Cache hit for key: ${cacheKey}`);
       return JSON.parse(cachedData);
     }
 
@@ -70,7 +79,8 @@ export class UserService {
     };
 
     await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-  
+    logger.info(`Found ${users.length} users for page ${page} with size ${pageSize}`);
+
     return result;
   }
 
@@ -78,6 +88,7 @@ export class UserService {
     const keys = await this.redis.keys('users:*');
     if (keys.length > 0) {
       await this.redis.del(keys);
+      logger.info('Cache cleared for users.');
     }
   }
 
@@ -89,12 +100,15 @@ export class UserService {
       }
     });
     if (!user) {
+      logger.warn(`User with ID ${id} not found`);
       throw new NotFoundException(`User with ID ${id} not found`);
     }
+    logger.info(`User found: ${user.id} - ${user.email}`);
     return user;
   }
 
   async getUserOrderWithUser(userId: string) {
+    logger.info(`Received request to get user with orders for user ID: ${userId}`);
     const userWithOrders = await this.prisma.user.findUnique({
       where: { 
         id: userId
@@ -103,20 +117,31 @@ export class UserService {
         orders: true
       },
     });
+
+    if (userWithOrders) {
+      logger.info(`Found user with ID: ${userId} and ${userWithOrders.orders.length} orders`);
+    } else {
+      logger.warn(`User with ID: ${userId} not found`);
+    }
     
     return userWithOrders;
   }
 
   async getUserOrderWithCustomers(userId: string) {
-    return this.prisma.order.findMany({
+    logger.info(`Received request to get orders with customers for user ID: ${userId}`);
+    const orders = await this.prisma.order.findMany({
       where: { userId },
       include: {
         customers: true
       }
-    })
+    });
+  
+    logger.info(`Found ${orders.length} orders for user ID: ${userId}`);
+    return orders;
   }
 
   async getUserCustomerStats(userId: string) {
+    logger.info(`Received request to get customer stats for user ID: ${userId}`);
     const orders = await this.prisma.order.findMany({
       where: { userId },
       include: { customers: true },
@@ -125,6 +150,7 @@ export class UserService {
     const uniqueCustomers = new Set(
       orders.flatMap(order => order.customers?.map(customer => customer.id)).filter(id => id != null)
     );
+    logger.info(`Found ${uniqueCustomers.size} unique customers for user ID: ${userId}`);
     return uniqueCustomers.size;
   }
 
@@ -135,6 +161,7 @@ export class UserService {
   async update(id: string, updateUserDto: UpdateUserDto) {
     const existingUser = await this.prisma.user.findUnique({ where: { id } });
     if (!existingUser) {
+      logger.warn(`User with ID ${id} not found for update`);
       throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
     }
     const user = await this.prisma.user.update({
@@ -142,6 +169,7 @@ export class UserService {
       data: updateUserDto,
     });
     await this.clearCache();
+    logger.info(`User updated: ${user.id} - ${user.email}`);
     return user;
   }
 
@@ -150,6 +178,7 @@ export class UserService {
       where: { id },
     });
     await this.clearCache();
+    logger.info(`User removed: ${user.id} - ${user.email}`);
     return user;
   }
 }

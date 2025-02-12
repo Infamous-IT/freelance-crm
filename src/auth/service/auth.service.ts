@@ -7,7 +7,7 @@ import { RegisterDto } from '../dto/register.dto';
 import { EmailService } from './email.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RedisClientType } from 'redis';
-import * as jwt from 'jsonwebtoken';
+import logger from 'src/logger/logger';
 
 @Injectable()
 export class AuthService {
@@ -34,6 +34,7 @@ export class AuthService {
       secret: process.env.JWT_REFRESH_TOKEN,
     });
 
+    logger.info(`Generated access token and refresh token for user: ${user.email}`);
     return {
       accessToken,
       refreshToken,
@@ -42,35 +43,42 @@ export class AuthService {
 
   async validateAccessToken(token: string) {
     try {
+      logger.info(`Validating access token: ${token}`);
       return this.jwtService.verify(token, {
         secret: process.env.JWT_SECRET_TOKEN,
       });
     } catch (error) {
+      logger.error('Error validating access token', { error });
       return null;
     }
   }
 
   async comparePassword(enteredPassword: string, storedPassword: string): Promise<boolean> {
+    logger.info('Comparing passwords');
     return await bcrypt.compare(enteredPassword, storedPassword);
   }
 
   async validateUser(email: string, password: string): Promise<User> {
     const user = await this.userService.findByEmail(email);
     if (!user) {
+      logger.warn(`User with email ${email} not found`);
       throw new UnauthorizedException('Невірні облікові дані');
     }
 
     const isPasswordValid = await this.comparePassword(password, user.password);
     if (!isPasswordValid) {
+      logger.warn(`Invalid password for user ${email}`);
       throw new UnauthorizedException('Невірні облікові дані');
     }
 
+    logger.info(`User validated: ${email}`);
     return user;
   }
 
   async register(registerDto: RegisterDto): Promise<User> {
     const existingUser = await this.userService.findByEmail(registerDto.email);
     if (existingUser) {
+      logger.warn(`User with email ${registerDto.email} already exists`);
       throw new ConflictException('Користувач з таким email вже існує');
     }
 
@@ -81,12 +89,13 @@ export class AuthService {
       password: hashedPassword,
     });
 
+    logger.info(`New user registered: ${newUser.email}`);
     return newUser;
   }
 
   async login(email: string, password: string): Promise<any> {
+    logger.info(`Login attempt for user: ${email}`);
     const user = await this.validateUser(email, password);
-
     const tokens = await this.generateTokens(user);
 
     return {
@@ -98,25 +107,31 @@ export class AuthService {
 
   async revokeAccessToken(accessToken: string): Promise<void> {
     try {
+      logger.info(`Revoking access token: ${accessToken}`);
       await this.redisClient.set(accessToken, 'revoked', { EX: 3600 });
     } catch (err) {
+      logger.error('Error revoking access token', { error: err });
       throw err;
     }
   }
 
   async isAccessTokenRevoked(accessToken: string): Promise<boolean> {
     try {
+      logger.info(`Checking if access token is revoked: ${accessToken}`);
       const result = await this.redisClient.get(accessToken);
       return result === 'revoked';
     } catch (err) {
+      logger.error('Error checking token revocation', { error: err });
       throw err;
     }
   }
 
   async getTokenTTL(token: string): Promise<number> {
     try {
+      logger.info(`Getting TTL for token: ${token}`);
       return await this.redisClient.ttl(token);
     } catch (err) {
+      logger.error('Error getting TTL for token', { error: err });
       throw err;
     }
   }
@@ -125,10 +140,12 @@ export class AuthService {
     const storedCode = this.forgotPasswordCodes.get(email);
     
     if (!storedCode) {
+      logger.warn(`No verification code found for email ${email}`);
       throw new NotFoundException('Код для підтвердження не знайдено');
     }
 
     if(storedCode !== code) {
+      logger.warn(`Invalid verification code for email ${email}`);
       throw new UnauthorizedException("Код не валідний!");
     }
 
@@ -138,6 +155,7 @@ export class AuthService {
       data: { isEmailVerified: true },
     });
 
+    logger.info(`Email verified for ${email}`);
     return !!updatedUser;
    }
 
@@ -151,12 +169,14 @@ export class AuthService {
       'Код підтвердження',
       `Ваш код підтвердження: ${code}`,
     );
+    logger.info(`Verification code sent to ${email}`);
   }
 
   async sendForgotPassword(email: string) {
     const user = await this.userService.findByEmail(email);
 
     if(!user) {
+      logger.warn(`User with email ${email} not found for password reset`);
       throw new UnauthorizedException("Користувача не знайдено!");
     }
 
@@ -164,6 +184,7 @@ export class AuthService {
     this.forgotPasswordCodes.set(email, code);
 
     await this.emailService.sendEmail(email, 'Код для відновлення паролю', `Ваш код: ${code}`);
+    logger.info(`Password reset code sent to ${email}`);
     return { message: 'Код відправлено на вашу електронну адресу.' };
   }
 
@@ -174,6 +195,7 @@ export class AuthService {
     const user = await this.userService.findByEmail(email);
     user!.password = hashedPassword;
 
+    logger.info(`Password updated for ${email}`);
     return this.userService.update(user!.id, user!);
   }
 
@@ -181,11 +203,15 @@ export class AuthService {
     const user = await this.userService.findOne(userId);
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) throw new UnauthorizedException('Старий пароль неправильний');
+    if (!isMatch) {
+      logger.warn(`Old password incorrect for user ${userId}`);
+      throw new UnauthorizedException('Старий пароль неправильний');
+    } 
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
 
+    logger.info(`Password changed for user ${userId}`);
     return this.userService.update(userId, user);
   }
 }

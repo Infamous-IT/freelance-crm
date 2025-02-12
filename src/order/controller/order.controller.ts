@@ -5,6 +5,7 @@ import { UpdateOrderDto } from '../dto/update-order.dto';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Order } from '../entities/order.entity';
 import { AuthGuard } from '@nestjs/passport';
+import logger from 'src/logger/logger';
 
 @ApiTags('Orders')
 @Controller('order')
@@ -16,6 +17,7 @@ export class OrderController {
   @ApiResponse({ status: 201, description: 'Замовлення успішно створене', type: Order })
   @UseGuards(AuthGuard('jwt'))
   create(@Body() createOrderDto: CreateOrderDto) {
+    logger.info('Received request to create a new order');
     return this.orderService.create(createOrderDto);
   }
 
@@ -25,6 +27,7 @@ export class OrderController {
   @ApiQuery({ name: 'page', required: false, description: 'Номер сторінки', example: 1 })
   @UseGuards(AuthGuard('jwt'))
   findAll(@Query('page') page: number) {
+    logger.info(`Received request to get orders on page ${page}`);
     return this.orderService.findAll(Number(page) || 1);
   }
 
@@ -33,6 +36,7 @@ export class OrderController {
   @ApiResponse({ status: 200, description: 'Замовлення успішно знайдено', type: Order })
   @UseGuards(AuthGuard('jwt'))
   findOne(@Param('id') id: string) {
+    logger.info(`Received request to get order with ID: ${id}`);
     return this.orderService.findOne(id);
   }
 
@@ -43,6 +47,7 @@ export class OrderController {
   @UseGuards(AuthGuard('jwt'))
   update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto, @Req() req: any) {
     const userId = req.user.id;
+    logger.info(`User with ID: ${userId} is attempting to update order with ID: ${id}`);
     return this.orderService.update(id, userId, updateOrderDto);
   }
 
@@ -53,6 +58,7 @@ export class OrderController {
   @UseGuards(AuthGuard('jwt'))
   remove(@Param('id') id: string, @Req() req: any) {
     const userId = req.user.id;
+    logger.info(`User with ID: ${userId} is attempting to delete order with ID: ${id}`);
     return this.orderService.remove(id, userId);
   }
 
@@ -61,6 +67,7 @@ export class OrderController {
   @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
   @UseGuards(AuthGuard('jwt'))
   getUserOrderStats(@Req() req: any) {
+    logger.info(`Fetching order statistics for user with ID: ${req.user.id}`);
     return this.orderService.getUserOrderStats(req.user.id, req.user.id, req.user.role === 'ADMIN');
   }
 
@@ -71,6 +78,7 @@ export class OrderController {
   @UseGuards(AuthGuard('jwt'))
   getTopExpensiveOrders(@Req() req: any, @Query('limit') limit: number) {
     const isAdmin = req.user.role === 'ADMIN';
+    logger.info(`Fetching top ${limit} expensive orders for user with ID: ${req.user.id}`);
     return this.orderService.getTopExpensiveOrders(req.user.id, isAdmin, Number(limit) || 5);
   }
 }

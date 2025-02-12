@@ -3,6 +3,7 @@ import { RedisClientType } from 'redis';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
+import logger from 'src/logger/logger';
 
 @Injectable()
 export class CustomerService {
@@ -13,6 +14,7 @@ export class CustomerService {
 
   async create(createCustomerDto: CreateCustomerDto) {
     const { orderIds, ...customerData } = createCustomerDto;
+    logger.info('Received request to create a new customer');
 
     const customer = await this.prisma.customer.create({
       data: {
@@ -26,19 +28,21 @@ export class CustomerService {
     })
     
     await this.clearCache();
-
+    logger.info('New customer created successfully');
     return customer;
   }
 
   async addOrdersToCustomer(customerId: string, orderIds: string[]) {
-   const existingOrders = await this.prisma.order.findMany({
-    where: {
-      id: { in: orderIds },
-      customers: { some: {} }
-    }
-   })
+    logger.info(`Received request to add orders to customer with ID: ${customerId}`);
+    const existingOrders = await this.prisma.order.findMany({
+      where: {
+        id: { in: orderIds },
+        customers: { some: {} }
+      }
+    })
 
    if (existingOrders.length > 0) {
+    logger.error('Some orders are already assigned to a customer');
     throw new Error(`Some orders are already assigned to a customer`);
   }
 
@@ -52,7 +56,7 @@ export class CustomerService {
     });
 
     await this.clearCache();
-
+    logger.info(`Orders successfully added to customer with ID: ${customerId}`);
     return updatedCustomer;
   }
 
@@ -62,8 +66,11 @@ export class CustomerService {
     const skip = (page - 1) * take;
     const cacheKey = `customers:page${page}:size=${take}`;
 
+    logger.info(`Fetching customers for page ${page}`);
+
     const cachedData = await this.redis.get(cacheKey);
     if(cachedData) {
+      logger.info('Cache hit for customers');
       return JSON.parse(cachedData);
     }
 
@@ -87,13 +94,17 @@ export class CustomerService {
 
     await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
 
+    logger.info('Fetched and cached customers data');
     return result;
   }
 
   async findOne(id: string) {
     const cacheKey = `customer:${id}`;
+    logger.info(`Fetching customer with ID: ${id}`);
+
     const cachedData = await this.redis.get(cacheKey);
     if (cachedData) {
+      logger.info('Cache hit for customer');
       return JSON.parse(cachedData);
     }
 
@@ -105,20 +116,23 @@ export class CustomerService {
     });
 
     if(!customer) {
+      logger.error(`Customer with ID ${id} not found`);
       throw new NotFoundException(`Customer with id ${id} was not found.`)
     }
 
     await this.redis.set(cacheKey, JSON.stringify({ ...customer, order: customer.order || [] }), { EX: 300 });
-
+    logger.info(`Fetched customer with ID: ${id}`);
     return customer;
   }
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
+    logger.info(`Received request to update customer with ID: ${id}`);
     const existingCustomer = await this.prisma.customer.findUnique({
       where: { id },
     });
 
     if(!existingCustomer) {
+      logger.error(`Customer with ID ${id} not found`);
       throw new NotFoundException(`Customer with id ${id} was not found.`)
     }
 
@@ -128,17 +142,19 @@ export class CustomerService {
     });
 
     await this.clearCache();
-
+    logger.info(`Customer with ID: ${id} updated successfully`);
     return updatedCustomer; 
   }
 
   async remove(id: string) {
+    logger.info(`Received request to delete customer with ID: ${id}`);
     const existingCustomer = await this.prisma.customer.findUnique({
       where: { id },
     });
 
     
     if(!existingCustomer) {
+      logger.error(`Customer with ID ${id} not found`);
       throw new NotFoundException(`Customer with id ${id} was not found.`)
     }
 
@@ -147,11 +163,13 @@ export class CustomerService {
     });
 
     await this.clearCache();
+    logger.info(`Customer with ID: ${id} deleted successfully`);
 
     return `Customer with id ${id} was delete.`;
   }
 
   async getUserCustomerStats(requestingUserId: string, isAdmin: boolean) {
+    logger.info(`Fetching customer stats for user with ID: ${requestingUserId}`);
     const stats = await this.prisma.customer.aggregate({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
       _count: { id: true },
@@ -163,6 +181,7 @@ export class CustomerService {
   }
 
   async getCustomerSpending(requestingUserId: string, isAdmin: boolean) {
+    logger.info(`Fetching customer spending for user with ID: ${requestingUserId}`);
     const customers = await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
       select: {
@@ -182,6 +201,7 @@ export class CustomerService {
   }
 
   async getTopCustomersByOrders(userId: string, isAdmin: boolean, limit: number = 5) {
+    logger.info(`Fetching top customers by orders for user with ID: ${userId}`);
     return await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId } } },
       orderBy: { order: { _count: 'desc' } },
@@ -191,6 +211,7 @@ export class CustomerService {
   }
 
   async getTopCustomersBySpending(requestingUserId: string, isAdmin: boolean, limit: number = 5) {
+    logger.info(`Fetching top customers by spending for user with ID: ${requestingUserId}`);
     const spendingData = await this.prisma.order.findMany({
       where: isAdmin ? {} : { userId: requestingUserId },
       select: {
@@ -232,13 +253,12 @@ export class CustomerService {
     }));
   }
   
-  
-  
-  
   private async clearCache() {
+    logger.info('Clearing customer cache');
     const keys = await this.redis.keys('customers:*');
     if (keys.length > 0) {
       await this.redis.del(keys);
+      logger.info('Cache cleared');
     }
   }
 }

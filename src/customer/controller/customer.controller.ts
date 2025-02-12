@@ -4,6 +4,7 @@ import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import logger from 'src/logger/logger';
 
 @ApiTags('Customers')
 @Controller('customers')
@@ -15,6 +16,7 @@ export class CustomerController {
   @ApiResponse({ status: 201, description: 'Замовник успішно створений' })
   @Post()
   create(@Body() createCustomerDto: CreateCustomerDto) {
+    logger.info('Received request to create a new customer');
     return this.customerService.create(createCustomerDto);
   }
 
@@ -27,6 +29,7 @@ export class CustomerController {
     @Param('customerId') customerId: string, 
     @Body() body: { orderIds: string[] }
   ) {
+    logger.info(`Adding orders to customer with ID: ${customerId}`);
     return this.customerService.addOrdersToCustomer(customerId, body.orderIds);
   }
 
@@ -35,6 +38,7 @@ export class CustomerController {
   @UseGuards(AuthGuard('jwt'))
   @Get()
   findAll() {
+    logger.info('Received request to find all customers');
     return this.customerService.findAll();
   }
 
@@ -44,6 +48,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Замовник знайдений' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
   findOne(@Param('id') id: string) {
+    logger.info(`Received request to find customer by ID ${id}`);
     return this.customerService.findOne(id);
   }
 
@@ -53,6 +58,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Інформація про замовника успішно оновлена' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
   update(@Param('id') id: string, @Body() updateCustomerDto: UpdateCustomerDto) {
+    logger.info(`Received request to update customer with id ${id}`);
     return this.customerService.update(id, updateCustomerDto);
   }
 
@@ -62,6 +68,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Замовник успішно видалений' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
   remove(@Param('id') id: string) {
+    logger.info(`Received request to delete customer with ID: ${id}`);
     return this.customerService.remove(id);
   }
 
@@ -70,6 +77,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано витрати клієнтів' })
   @UseGuards(AuthGuard('jwt'))
   getCustomerSpending(@Req() req: any) {
+    logger.info('Received request to get customer spending');
     return this.customerService.getCustomerSpending(req.user.id, req.user.role === 'ADMIN');
   }
 
@@ -80,9 +88,8 @@ export class CustomerController {
   @UseGuards(AuthGuard('jwt'))
   getTopCustomersBySpending(@Req() req: any, @Query('limit') limit: number) {
     const isAdmin = req.user.role === 'ADMIN';
-    console.log('isAdmin:', isAdmin);
     const customersLimit = Number(limit) || 5;
-    console.log('Customers limit:', customersLimit);
+    logger.info('Received request to get top customers by spending');
     return this.customerService.getTopCustomersBySpending(req.user.id, isAdmin, customersLimit);
   }
 
@@ -94,6 +101,7 @@ export class CustomerController {
   getTopCustomersByOrders(@Req() req: any, @Query('limit') limit: number) {
     const userId: string = req.user.id;
     const isAdmin: boolean = req.user.role === 'ADMIN';
+    logger.info('Received request to get top customers by orders');
     return this.customerService.getTopCustomersByOrders(userId, isAdmin, Number(limit) || 5);
   }
 
@@ -102,6 +110,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
   @UseGuards(AuthGuard('jwt'))
   getUserCustomerStats(@Req() req: any) {
+    logger.info('Received request to get user customer stats');
     return this.customerService.getUserCustomerStats(req.user.id, req.user.role === 'admin');
   }
 }
