@@ -3,9 +3,10 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
-import { Prisma, User } from '@prisma/client';
+import { Order, Prisma, User } from '@prisma/client';
 import { RedisClientType } from 'redis';
 import logger from 'src/logger/logger';
+import { PaginatedUsers } from 'src/interfaces/paginated.user.interface';
 
 @Injectable()
 export class UserService {
@@ -14,7 +15,7 @@ export class UserService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
     ){}
 
-  async create(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto): Promise<User> {
     try {
       const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
     const user = await this.prisma.user.create({
@@ -36,10 +37,10 @@ export class UserService {
   async findAll(
     page: number = 1,
     pageSize: number = 20,
-    sortBy: string = 'email',
+    sortBy: keyof User = 'email',
     sortOrder: 'asc' | 'desc' = 'asc',
-    filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string }
-  ) {
+    filterDto?: Partial<Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>>
+  ): Promise<PaginatedUsers> {
     const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
     const cachedData = await this.redis.get(cacheKey);
     if(cachedData) {
@@ -84,7 +85,7 @@ export class UserService {
     return result;
   }
 
-  async clearCache() {
+  async clearCache(): Promise<void> {
     const keys = await this.redis.keys('users:*');
     if (keys.length > 0) {
       await this.redis.del(keys);
@@ -92,7 +93,7 @@ export class UserService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<User & { orders: Order[ ]}> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
@@ -107,7 +108,7 @@ export class UserService {
     return user;
   }
 
-  async getUserOrderWithUser(userId: string) {
+  async getUserOrderWithUser(userId: string): Promise<(User & { orders: Order[] }) | null> {
     logger.info(`Received request to get user with orders for user ID: ${userId}`);
     const userWithOrders = await this.prisma.user.findUnique({
       where: { 
@@ -127,7 +128,7 @@ export class UserService {
     return userWithOrders;
   }
 
-  async getUserOrderWithCustomers(userId: string) {
+  async getUserOrderWithCustomers(userId: string): Promise<Order[]> {
     logger.info(`Received request to get orders with customers for user ID: ${userId}`);
     const orders = await this.prisma.order.findMany({
       where: { userId },
@@ -140,7 +141,7 @@ export class UserService {
     return orders;
   }
 
-  async getUserCustomerStats(userId: string) {
+  async getUserCustomerStats(userId: string): Promise<number> {
     logger.info(`Received request to get customer stats for user ID: ${userId}`);
     const orders = await this.prisma.order.findMany({
       where: { userId },
@@ -158,7 +159,7 @@ export class UserService {
     return await this.prisma.user.findUnique({ where: { email } });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const existingUser = await this.prisma.user.findUnique({ where: { id } });
     if (!existingUser) {
       logger.warn(`User with ID ${id} not found for update`);
@@ -173,7 +174,7 @@ export class UserService {
     return user;
   }
 
-  async remove(id: string) {
+  async remove(id: string): Promise<User> {
     const user = await this.prisma.user.delete({
       where: { id },
     });

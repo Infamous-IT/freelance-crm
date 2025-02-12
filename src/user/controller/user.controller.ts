@@ -8,7 +8,8 @@ import { UserService } from '../service/user.service';
 import logger from 'src/logger/logger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { Role } from '@prisma/client';
+import { Order, Role } from '@prisma/client';
+import { PaginatedUsers } from 'src/interfaces/paginated.user.interface';
 
 @ApiTags('Users')
 @Controller('user')
@@ -18,7 +19,7 @@ export class UserController {
   @Post()
   @ApiOperation({ summary: 'Створити нового користувача' })
   @ApiResponse({ status: 201, description: 'Користувач успішно створений', type: User })
-  async create(@Body() createUserDto: CreateUserDto) {
+  async create(@Body() createUserDto: CreateUserDto): Promise<User> {
     logger.info('Received request to create a new user');
     const user = await this.userService.create(createUserDto);
     logger.info(`User created: ${user.id} - ${user.email}`);
@@ -27,20 +28,18 @@ export class UserController {
 
   @Get()
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
-  @ApiResponse({ status: 200, description: 'Список користувачів', type: [User] })
+  @ApiResponse({ status: 200, description: 'Список користувачів' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   async findAll(
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 20,
-    @Query('sortBy') sortBy: string = 'email',
+    @Query('sortBy') sortBy: keyof User = 'email',
     @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'asc',
-    @Query() filterDto?: { email?: string; firstName?: string; lastName?: string; country?: string },
-  ) {
-    logger.info(`Received request to get users with page: ${page}, size: ${pageSize}`);
-    const users = await this.userService.findAll(page, pageSize, sortBy, sortOrder, filterDto);
-    logger.info(`Found ${users.data.length} users on page ${page}`);
-    return users;
+    @Query() filterDto?: Partial<Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>>,
+  ): Promise<PaginatedUsers> {
+    logger.info(`Fetching users: page=${page}, pageSize=${pageSize}`);
+    return this.userService.findAll(page, pageSize, sortBy, sortOrder, filterDto);
   }
 
   @Get(':id')
@@ -48,7 +47,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Користувач знайдений', type: User })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.FREELANCER)
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string): Promise<User & { orders: Order[] }> {
     logger.info(`Received request to find user with ID: ${id}`);
     const user = await this.userService.findOne(id);
     logger.info(`User found: ${user.id} - ${user.email}`);
@@ -60,7 +59,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.FREELANCER)
-  async getUserOrderWithUser(@Param('userId') userId: string) {
+  async getUserOrderWithUser(@Param('userId') userId: string): Promise<Order[]> {
     logger.info(`Received request to get orders for user with ID: ${userId}`);
     const orders = await this.userService.getUserOrderWithCustomers(userId);
     logger.info(`Found ${orders.length} orders for user with ID: ${userId}`);
@@ -72,7 +71,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Статистика по замовниках користувача', type: Number })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.FREELANCER)
-  async getUserCustomerStats(@Param('userId') userId: string) {
+  async getUserCustomerStats(@Param('userId') userId: string): Promise<number> {
     logger.info(`Received request to get customer stats for user with ID: ${userId}`);
     const stats = await this.userService.getUserCustomerStats(userId);
     logger.info(`Customer stats for user with ID: ${userId}: ${stats}`);
@@ -84,7 +83,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<User> {
     logger.info(`Received request to update user with ID: ${id}`);
     const user = await this.userService.update(id, updateUserDto);
     logger.info(`User updated: ${user.id} - ${user.email}`);
@@ -96,7 +95,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Користувач успішно видалений', type: User })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string): Promise<User> {
     logger.info(`Received request to delete user with ID: ${id}`);
     const user = await this.userService.remove(id);
     logger.info(`User removed: ${user.id} - ${user.email}`);
