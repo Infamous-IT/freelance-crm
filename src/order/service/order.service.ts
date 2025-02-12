@@ -4,6 +4,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import logger from 'src/logger/logger';
+import { Order } from '@prisma/client';
+import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/paginated.order.interface';
 
 @Injectable()
 export class OrderService {
@@ -12,7 +14,7 @@ export class OrderService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
     ) {}
 
-  async create(createOrderDto: CreateOrderDto) {
+  async create(createOrderDto: CreateOrderDto): Promise<Order> {
     const { startDate, endDate, ...otherFields } = createOrderDto;
 
     const formattedStartDate = this.convertDateToISO(startDate);
@@ -33,7 +35,7 @@ export class OrderService {
     return order;
   }
 
-  async findAll(page: number = 1) {
+  async findAll(page: number = 1): Promise<PaginatedOrders> {
     const take = 20;
     page = parseInt(String(page), 10);
     const skip = (page - 1) * take;
@@ -70,7 +72,7 @@ export class OrderService {
     return result;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Order | null> {
     logger.info(`Fetching order with ID: ${id}`);
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -80,7 +82,7 @@ export class OrderService {
     return order;
   }
 
-  async update(id: string, userId: string, updateOrderDto: UpdateOrderDto) {
+  async update(id: string, userId: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
     const order = await this.prisma.order.findUnique({
       where: { id },
     });
@@ -119,7 +121,7 @@ export class OrderService {
     return updatedOrder;
   }
 
-  async remove(id: string, userId: string) {
+  async remove(id: string, userId: string): Promise<Order> {
     const order = await this.prisma.order.findUnique({
       where: { id },
     });
@@ -141,7 +143,7 @@ export class OrderService {
     return deletedOrder;
   }
 
-  async getUserOrderStats(userId: string, requestingUserId: string, isAdmin: boolean) {
+  async getUserOrderStats(userId: string, requestingUserId: string, isAdmin: boolean): Promise<OrderStats> {
     if(!isAdmin && userId !== requestingUserId) {
       logger.error(`User with ID: ${requestingUserId} attempted to access stats of user with ID: ${userId}`);
       throw new ForbiddenException('У вас немає доступу до даних інших користувачів.');
@@ -156,18 +158,22 @@ export class OrderService {
     logger.info(`Fetched stats for user with ID: ${userId}`);
     return {
       totalOrders: stats._count.id,
-      totalEarnings: stats._sum.price ?? 0,
+      totalEarnings: stats._sum.price?.toNumber() ?? 0,
     };
   }
 
-  async getTopExpensiveOrders(userId: string, isAdmin: boolean, limit: number = 5) {
+  async getTopExpensiveOrders(userId: string, isAdmin: boolean, limit: number = 5): Promise<TopExpensiveOrder[]> {
     logger.info(`Fetching top ${limit} expensive orders for user ID: ${userId}`);
-    return await this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: isAdmin ? {} : { userId },
       orderBy: { price: 'desc' },
       take: limit,
       select: { id: true, title: true, price: true },
     });
+    return orders.map(order => ({
+      ...order,
+      price: order.price.toNumber(),
+    }));
   }
 
   private convertDateToISO(date: string): string {
@@ -176,7 +182,7 @@ export class OrderService {
     return formattedDate.toISOString();
   }
 
-  private async clearCache() {
+  private async clearCache(): Promise<void> {
     logger.info('Clearing cache for orders');
     const keys = await this.redis.keys('orders:*');
     if (keys.length > 0) {
