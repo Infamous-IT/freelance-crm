@@ -5,7 +5,7 @@ import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import logger from 'src/logger/logger';
 import { Order } from '@prisma/client';
-import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/paginated.order.interface';
+import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/order.interface';
 
 @Injectable()
 export class OrderService {

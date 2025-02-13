@@ -4,6 +4,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import logger from 'src/logger/logger';
+import { Customer } from '@prisma/client';
+import { CustomerSpending, CustomerStats, PaginatedResult, TopCustomerByOrders, TopCustomerBySpending } from 'src/interfaces/customer.interface';
 
 @Injectable()
 export class CustomerService {
@@ -12,7 +14,7 @@ export class CustomerService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
     ) {}
 
-  async create(createCustomerDto: CreateCustomerDto) {
+  async create(createCustomerDto: CreateCustomerDto): Promise<Customer> {
     const { orderIds, ...customerData } = createCustomerDto;
     logger.info('Received request to create a new customer');
 
@@ -32,7 +34,7 @@ export class CustomerService {
     return customer;
   }
 
-  async addOrdersToCustomer(customerId: string, orderIds: string[]) {
+  async addOrdersToCustomer(customerId: string, orderIds: string[]): Promise<Customer> {
     logger.info(`Received request to add orders to customer with ID: ${customerId}`);
     const existingOrders = await this.prisma.order.findMany({
       where: {
@@ -60,7 +62,7 @@ export class CustomerService {
     return updatedCustomer;
   }
 
-  async findAll(page: number = 1) {
+  async findAll(page: number = 1): Promise<PaginatedResult<Customer>> {
     const take = 20;
     page = parseInt(String(page), 10);
     const skip = (page - 1) * take;
@@ -98,7 +100,7 @@ export class CustomerService {
     return result;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Customer | null> {
     const cacheKey = `customer:${id}`;
     logger.info(`Fetching customer with ID: ${id}`);
 
@@ -125,7 +127,7 @@ export class CustomerService {
     return customer;
   }
 
-  async update(id: string, updateCustomerDto: UpdateCustomerDto) {
+  async update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<Customer> {
     logger.info(`Received request to update customer with ID: ${id}`);
     const existingCustomer = await this.prisma.customer.findUnique({
       where: { id },
@@ -146,7 +148,7 @@ export class CustomerService {
     return updatedCustomer; 
   }
 
-  async remove(id: string) {
+  async remove(id: string): Promise<string> {
     logger.info(`Received request to delete customer with ID: ${id}`);
     const existingCustomer = await this.prisma.customer.findUnique({
       where: { id },
@@ -168,7 +170,7 @@ export class CustomerService {
     return `Customer with id ${id} was delete.`;
   }
 
-  async getUserCustomerStats(requestingUserId: string, isAdmin: boolean) {
+  async getUserCustomerStats(requestingUserId: string, isAdmin: boolean): Promise<CustomerStats> {
     logger.info(`Fetching customer stats for user with ID: ${requestingUserId}`);
     const stats = await this.prisma.customer.aggregate({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
@@ -180,7 +182,7 @@ export class CustomerService {
     };
   }
 
-  async getCustomerSpending(requestingUserId: string, isAdmin: boolean) {
+  async getCustomerSpending(requestingUserId: string, isAdmin: boolean): Promise<CustomerSpending[]> {
     logger.info(`Fetching customer spending for user with ID: ${requestingUserId}`);
     const customers = await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
@@ -200,7 +202,7 @@ export class CustomerService {
     }))
   }
 
-  async getTopCustomersByOrders(userId: string, isAdmin: boolean, limit: number = 5) {
+  async getTopCustomersByOrders(userId: string, isAdmin: boolean, limit: number = 5): Promise<TopCustomerByOrders[]> {
     logger.info(`Fetching top customers by orders for user with ID: ${userId}`);
     return await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId } } },
@@ -210,7 +212,7 @@ export class CustomerService {
     });
   }
 
-  async getTopCustomersBySpending(requestingUserId: string, isAdmin: boolean, limit: number = 5) {
+  async getTopCustomersBySpending(requestingUserId: string, isAdmin: boolean, limit: number = 5): Promise<TopCustomerBySpending[]> {
     logger.info(`Fetching top customers by spending for user with ID: ${requestingUserId}`);
     const spendingData = await this.prisma.order.findMany({
       where: isAdmin ? {} : { userId: requestingUserId },
@@ -253,7 +255,7 @@ export class CustomerService {
     }));
   }
   
-  private async clearCache() {
+  private async clearCache(): Promise<void>  {
     logger.info('Clearing customer cache');
     const keys = await this.redis.keys('customers:*');
     if (keys.length > 0) {

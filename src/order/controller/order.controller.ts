@@ -9,7 +9,7 @@ import logger from 'src/logger/logger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/paginated.order.interface';
+import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/order.interface';
 
 @ApiTags('Orders')
 @Controller('order')

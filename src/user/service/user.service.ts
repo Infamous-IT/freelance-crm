@@ -6,7 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { Order, Prisma, User } from '@prisma/client';
 import { RedisClientType } from 'redis';
 import logger from 'src/logger/logger';
-import { PaginatedUsers } from 'src/interfaces/paginated.user.interface';
+import { PaginatedUsers } from 'src/interfaces/user.interface';
 
 @Injectable()
 export class UserService {

@@ -8,6 +8,8 @@ import logger from 'src/logger/logger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Role } from '@prisma/client';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Customer } from '@prisma/client';
+import { CustomerSpending, CustomerStats, PaginatedResult, TopCustomerByOrders, TopCustomerBySpending } from 'src/interfaces/customer.interface';
 
 @ApiTags('Customers')
 @Controller('customers')
@@ -19,7 +21,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Створити нового замовника' })
   @ApiResponse({ status: 201, description: 'Замовник успішно створений' })
   @Post()
-  create(@Body() createCustomerDto: CreateCustomerDto) {
+  create(@Body() createCustomerDto: CreateCustomerDto): Promise<Customer> {
     logger.info('Received request to create a new customer');
     return this.customerService.create(createCustomerDto);
   }
@@ -33,7 +35,7 @@ export class CustomerController {
   addOrdersToCustomer(
     @Param('customerId') customerId: string, 
     @Body() body: { orderIds: string[] }
-  ) {
+  ): Promise<Customer> {
     logger.info(`Adding orders to customer with ID: ${customerId}`);
     return this.customerService.addOrdersToCustomer(customerId, body.orderIds);
   }
@@ -43,7 +45,7 @@ export class CustomerController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   @Get()
-  findAll() {
+  findAll(): Promise<PaginatedResult<Customer>> {
     logger.info('Received request to find all customers');
     return this.customerService.findAll();
   }
@@ -54,7 +56,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Отримати замовника за ID' })
   @ApiResponse({ status: 200, description: 'Замовник знайдений' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string): Promise<Customer | null>  {
     logger.info(`Received request to find customer by ID ${id}`);
     return this.customerService.findOne(id);
   }
@@ -65,7 +67,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Оновити інформацію про замовника' })
   @ApiResponse({ status: 200, description: 'Інформація про замовника успішно оновлена' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
-  update(@Param('id') id: string, @Body() updateCustomerDto: UpdateCustomerDto) {
+  update(@Param('id') id: string, @Body() updateCustomerDto: UpdateCustomerDto): Promise<Customer> {
     logger.info(`Received request to update customer with id ${id}`);
     return this.customerService.update(id, updateCustomerDto);
   }
@@ -76,7 +78,7 @@ export class CustomerController {
   @ApiOperation({ summary: 'Видалити замовника' })
   @ApiResponse({ status: 200, description: 'Замовник успішно видалений' })
   @ApiResponse({ status: 404, description: 'Замовник не знайдений' })
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: string): Promise<string> {
     logger.info(`Received request to delete customer with ID: ${id}`);
     return this.customerService.remove(id);
   }
@@ -86,7 +88,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано витрати клієнтів' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getCustomerSpending(@Req() req: any) {
+  getCustomerSpending(@Req() req: any): Promise<CustomerSpending[]> {
     logger.info('Received request to get customer spending');
     return this.customerService.getCustomerSpending(req.user.id, req.user.role === 'ADMIN');
   }
@@ -97,7 +99,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getTopCustomersBySpending(@Req() req: any, @Query('limit') limit: number) {
+  getTopCustomersBySpending(@Req() req: any, @Query('limit') limit: number): Promise<TopCustomerBySpending[]> {
     const isAdmin = req.user.role === 'ADMIN';
     const customersLimit = Number(limit) || 5;
     logger.info('Received request to get top customers by spending');
@@ -110,7 +112,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getTopCustomersByOrders(@Req() req: any, @Query('limit') limit: number) {
+  getTopCustomersByOrders(@Req() req: any, @Query('limit') limit: number): Promise<TopCustomerByOrders[]> {
     const userId: string = req.user.id;
     const isAdmin: boolean = req.user.role === 'ADMIN';
     logger.info('Received request to get top customers by orders');
@@ -122,7 +124,7 @@ export class CustomerController {
   @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getUserCustomerStats(@Req() req: any) {
+  getUserCustomerStats(@Req() req: any): Promise<CustomerStats> {
     logger.info('Received request to get user customer stats');
     return this.customerService.getUserCustomerStats(req.user.id, req.user.role === 'admin');
   }

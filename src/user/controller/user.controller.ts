@@ -9,7 +9,7 @@ import logger from 'src/logger/logger';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { Order, Role } from '@prisma/client';
-import { PaginatedUsers } from 'src/interfaces/paginated.user.interface';
+import { PaginatedUsers } from 'src/interfaces/user.interface';
 
 @ApiTags('Users')
 @Controller('user')
