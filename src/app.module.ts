@@ -14,14 +14,14 @@ import { LoggerMiddleware } from './logger/LoggerMiddleware';
 
 @Module({
   imports: [
-    UserModule, 
-    OrderModule, 
-    CustomerModule, 
-    AuthModule, 
-    RedisModule, 
+    UserModule,
+    OrderModule,
+    CustomerModule,
+    AuthModule,
+    RedisModule,
     WinstonModule.forRoot({
       transports: logger.transports,
-    })
+    }),
   ],
   controllers: [AppController],
   providers: [AppService, PrismaModule],

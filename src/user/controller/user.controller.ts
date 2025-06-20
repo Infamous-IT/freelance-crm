@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -18,7 +28,11 @@ export class UserController {
 
   @Post()
   @ApiOperation({ summary: 'Створити нового користувача' })
-  @ApiResponse({ status: 201, description: 'Користувач успішно створений', type: User })
+  @ApiResponse({
+    status: 201,
+    description: 'Користувач успішно створений',
+    type: User,
+  })
   async create(@Body() createUserDto: CreateUserDto): Promise<User> {
     logger.info('Received request to create a new user');
     const user = await this.userService.create(createUserDto);
@@ -36,10 +50,19 @@ export class UserController {
     @Query('pageSize') pageSize: number = 20,
     @Query('sortBy') sortBy: keyof User = 'email',
     @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'asc',
-    @Query() filterDto?: Partial<Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>>,
+    @Query()
+    filterDto?: Partial<
+      Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>
+    >,
   ): Promise<PaginatedUsers> {
     logger.info(`Fetching users: page=${page}, pageSize=${pageSize}`);
-    return this.userService.findAll(page, pageSize, sortBy, sortOrder, filterDto);
+    return this.userService.findAll(
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+      filterDto,
+    );
   }
 
   @Get(':id')
@@ -56,10 +79,16 @@ export class UserController {
 
   @Get('orders/:userId')
   @ApiOperation({ summary: 'Отримати замовлення користувача за його ID' })
-  @ApiResponse({ status: 200, description: 'Користувач та його замовлення знайдено', type: User })
+  @ApiResponse({
+    status: 200,
+    description: 'Користувач та його замовлення знайдено',
+    type: User,
+  })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.FREELANCER)
-  async getUserOrderWithUser(@Param('userId') userId: string): Promise<Order[]> {
+  async getUserOrderWithUser(
+    @Param('userId') userId: string,
+  ): Promise<Order[]> {
     logger.info(`Received request to get orders for user with ID: ${userId}`);
     const orders = await this.userService.getUserOrderWithCustomers(userId);
     logger.info(`Found ${orders.length} orders for user with ID: ${userId}`);
@@ -68,11 +97,17 @@ export class UserController {
 
   @Get('customer-stats/:userId')
   @ApiOperation({ summary: 'Отримати статистику по замовниках користувача' })
-  @ApiResponse({ status: 200, description: 'Статистика по замовниках користувача', type: Number })
+  @ApiResponse({
+    status: 200,
+    description: 'Статистика по замовниках користувача',
+    type: Number,
+  })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.FREELANCER)
   async getUserCustomerStats(@Param('userId') userId: string): Promise<number> {
-    logger.info(`Received request to get customer stats for user with ID: ${userId}`);
+    logger.info(
+      `Received request to get customer stats for user with ID: ${userId}`,
+    );
     const stats = await this.userService.getUserCustomerStats(userId);
     logger.info(`Customer stats for user with ID: ${userId}: ${stats}`);
     return stats;
@@ -80,10 +115,17 @@ export class UserController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Оновити користувача' })
-  @ApiResponse({ status: 200, description: 'Користувач успішно оновлений', type: User })
+  @ApiResponse({
+    status: 200,
+    description: 'Користувач успішно оновлений',
+    type: User,
+  })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<User> {
+  async update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<User> {
     logger.info(`Received request to update user with ID: ${id}`);
     const user = await this.userService.update(id, updateUserDto);
     logger.info(`User updated: ${user.id} - ${user.email}`);
@@ -92,7 +134,11 @@ export class UserController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Видалити користувача' })
-  @ApiResponse({ status: 200, description: 'Користувач успішно видалений', type: User })
+  @ApiResponse({
+    status: 200,
+    description: 'Користувач успішно видалений',
+    type: User,
+  })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   async remove(@Param('id') id: string): Promise<User> {

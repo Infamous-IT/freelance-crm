@@ -5,14 +5,27 @@ import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import logger from 'src/logger/logger';
 import { Customer } from '@prisma/client';
-import { CustomerSpending, CustomerStats, PaginatedResult, TopCustomerByOrders, TopCustomerBySpending } from 'src/interfaces/customer.interface';
+import {
+  CustomerSpending,
+  CustomerStats,
+  PaginatedResult,
+} from 'src/interfaces/customer.interface';
+import {
+  CustomerWithOrderIncludes,
+  customerWithOrderIncludes,
+  customerWithSelectIncludes,
+  GetTopCustomersBySpending,
+  getTopCustomersBySpending,
+  GetTopCustomersGetByOrders,
+  getTopCustomersGetByOrders,
+} from '../types/customer-prisma-types.interface';
 
 @Injectable()
 export class CustomerService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
-    ) {}
+  ) {}
 
   async create(createCustomerDto: CreateCustomerDto): Promise<Customer> {
     const { orderIds, ...customerData } = createCustomerDto;
@@ -21,38 +34,43 @@ export class CustomerService {
     const customer = await this.prisma.customer.create({
       data: {
         ...customerData,
-        order: orderIds 
+        order: orderIds
           ? {
-              connect: orderIds.map(orderId => ({ id: orderId })),
-          }
+              connect: orderIds.map((orderId) => ({ id: orderId })),
+            }
           : undefined,
       },
-    })
-    
+    });
+
     await this.clearCache();
     logger.info('New customer created successfully');
     return customer;
   }
 
-  async addOrdersToCustomer(customerId: string, orderIds: string[]): Promise<Customer> {
-    logger.info(`Received request to add orders to customer with ID: ${customerId}`);
+  async addOrdersToCustomer(
+    customerId: string,
+    orderIds: string[],
+  ): Promise<Customer> {
+    logger.info(
+      `Received request to add orders to customer with ID: ${customerId}`,
+    );
     const existingOrders = await this.prisma.order.findMany({
       where: {
         id: { in: orderIds },
-        customers: { some: {} }
-      }
-    })
+        customers: { some: {} },
+      },
+    });
 
-   if (existingOrders.length > 0) {
-    logger.error('Some orders are already assigned to a customer');
-    throw new Error(`Some orders are already assigned to a customer`);
-  }
+    if (existingOrders.length > 0) {
+      logger.error('Some orders are already assigned to a customer');
+      throw new Error(`Some orders are already assigned to a customer`);
+    }
 
-   const updatedCustomer = await this.prisma.customer.update({
+    const updatedCustomer = await this.prisma.customer.update({
       where: { id: customerId },
       data: {
         order: {
-          connect: orderIds.map(orderId => ({ id: orderId })),
+          connect: orderIds.map((orderId) => ({ id: orderId })),
         },
       },
     });
@@ -62,6 +80,7 @@ export class CustomerService {
     return updatedCustomer;
   }
 
+  // TODO: use Prisma.validator
   async findAll(page: number = 1): Promise<PaginatedResult<Customer>> {
     const take = 20;
     page = parseInt(String(page), 10);
@@ -71,7 +90,7 @@ export class CustomerService {
     logger.info(`Fetching customers for page ${page}`);
 
     const cachedData = await this.redis.get(cacheKey);
-    if(cachedData) {
+    if (cachedData) {
       logger.info('Cache hit for customers');
       return JSON.parse(cachedData);
     }
@@ -80,9 +99,7 @@ export class CustomerService {
       this.prisma.customer.findMany({
         skip,
         take,
-        include: {
-          order: true
-        }
+        ...customerWithOrderIncludes,
       }),
       this.prisma.customer.count(),
     ]);
@@ -92,7 +109,7 @@ export class CustomerService {
       totalCount,
       totalPages: Math.ceil(totalCount / take),
       currentPage: page,
-    }
+    };
 
     await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
 
@@ -100,7 +117,7 @@ export class CustomerService {
     return result;
   }
 
-  async findOne(id: string): Promise<Customer | null> {
+  async findOne(id: string): Promise<CustomerWithOrderIncludes | null> {
     const cacheKey = `customer:${id}`;
     logger.info(`Fetching customer with ID: ${id}`);
 
@@ -112,30 +129,35 @@ export class CustomerService {
 
     const customer = await this.prisma.customer.findUnique({
       where: { id },
-      include: { 
-        order: true, 
-      },
+      ...customerWithOrderIncludes,
     });
 
-    if(!customer) {
+    if (!customer) {
       logger.error(`Customer with ID ${id} not found`);
-      throw new NotFoundException(`Customer with id ${id} was not found.`)
+      throw new NotFoundException(`Customer with id ${id} was not found.`);
     }
 
-    await this.redis.set(cacheKey, JSON.stringify({ ...customer, order: customer.order || [] }), { EX: 300 });
+    await this.redis.set(
+      cacheKey,
+      JSON.stringify({ ...customer, order: customer.order || [] }),
+      { EX: 300 },
+    );
     logger.info(`Fetched customer with ID: ${id}`);
     return customer;
   }
 
-  async update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<Customer> {
+  async update(
+    id: string,
+    updateCustomerDto: UpdateCustomerDto,
+  ): Promise<Customer> {
     logger.info(`Received request to update customer with ID: ${id}`);
     const existingCustomer = await this.prisma.customer.findUnique({
       where: { id },
     });
 
-    if(!existingCustomer) {
+    if (!existingCustomer) {
       logger.error(`Customer with ID ${id} not found`);
-      throw new NotFoundException(`Customer with id ${id} was not found.`)
+      throw new NotFoundException(`Customer with id ${id} was not found.`);
     }
 
     const updatedCustomer = await this.prisma.customer.update({
@@ -145,7 +167,7 @@ export class CustomerService {
 
     await this.clearCache();
     logger.info(`Customer with ID: ${id} updated successfully`);
-    return updatedCustomer; 
+    return updatedCustomer;
   }
 
   async remove(id: string): Promise<string> {
@@ -154,13 +176,12 @@ export class CustomerService {
       where: { id },
     });
 
-    
-    if(!existingCustomer) {
+    if (!existingCustomer) {
       logger.error(`Customer with ID ${id} not found`);
-      throw new NotFoundException(`Customer with id ${id} was not found.`)
+      throw new NotFoundException(`Customer with id ${id} was not found.`);
     }
 
-    const deletedCustomer = await this.prisma.customer.delete({
+    await this.prisma.customer.delete({
       where: { id },
     });
 
@@ -170,50 +191,67 @@ export class CustomerService {
     return `Customer with id ${id} was delete.`;
   }
 
-  async getUserCustomerStats(requestingUserId: string, isAdmin: boolean): Promise<CustomerStats> {
-    logger.info(`Fetching customer stats for user with ID: ${requestingUserId}`);
+  async getUserCustomerStats(
+    requestingUserId: string,
+    isAdmin: boolean,
+  ): Promise<CustomerStats> {
+    logger.info(
+      `Fetching customer stats for user with ID: ${requestingUserId}`,
+    );
     const stats = await this.prisma.customer.aggregate({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
       _count: { id: true },
     });
 
     return {
-      totalCustomers: stats._count.id
+      totalCustomers: stats._count.id,
     };
   }
 
-  async getCustomerSpending(requestingUserId: string, isAdmin: boolean): Promise<CustomerSpending[]> {
-    logger.info(`Fetching customer spending for user with ID: ${requestingUserId}`);
+  async getCustomerSpending(
+    requestingUserId: string,
+    isAdmin: boolean,
+  ): Promise<CustomerSpending[]> {
+    logger.info(
+      `Fetching customer spending for user with ID: ${requestingUserId}`,
+    );
     const customers = await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId: requestingUserId } } },
-      select: {
-        id: true,
-        fullName: true,
-        order: {
-          select: { price: true },
-        },
-      },
+      ...customerWithSelectIncludes,
     });
 
-    return customers.map(customer => ({
+    return customers.map((customer) => ({
       id: customer.id,
       fullName: customer.fullName,
-      totalSpending: customer.order.reduce((sum, order) => sum + order.price.toNumber(), 0)
-    }))
+      totalSpending: customer.order.reduce(
+        (sum, order) => sum + order.price.toNumber(),
+        0,
+      ),
+    }));
   }
 
-  async getTopCustomersByOrders(userId: string, isAdmin: boolean, limit: number = 5): Promise<TopCustomerByOrders[]> {
+  async getTopCustomersByOrders(
+    userId: string,
+    isAdmin: boolean,
+    limit: number = 5,
+  ): Promise<GetTopCustomersGetByOrders[]> {
     logger.info(`Fetching top customers by orders for user with ID: ${userId}`);
     return await this.prisma.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId } } },
       orderBy: { order: { _count: 'desc' } },
       take: limit,
-      select: { id: true, fullName: true, _count: { select: { order: true } } },
+      ...getTopCustomersGetByOrders,
     });
   }
 
-  async getTopCustomersBySpending(requestingUserId: string, isAdmin: boolean, limit: number = 5): Promise<TopCustomerBySpending[]> {
-    logger.info(`Fetching top customers by spending for user with ID: ${requestingUserId}`);
+  async getTopCustomersBySpending(
+    requestingUserId: string,
+    isAdmin: boolean,
+    limit: number = 5,
+  ): Promise<GetTopCustomersBySpending[]> {
+    logger.info(
+      `Fetching top customers by spending for user with ID: ${requestingUserId}`,
+    );
     const spendingData = await this.prisma.order.findMany({
       where: isAdmin ? {} : { userId: requestingUserId },
       select: {
@@ -223,39 +261,38 @@ export class CustomerService {
         },
       },
     });
-  
+
     const customerSpendingMap = new Map<string, number>();
-  
-    spendingData.forEach(order => {
-      order.customers.forEach(customer => {
+
+    spendingData.forEach((order) => {
+      order.customers.forEach((customer) => {
         const prevSpending = customerSpendingMap.get(customer.id) || 0;
-        customerSpendingMap.set(customer.id, prevSpending + Number(order.price));
+        customerSpendingMap.set(
+          customer.id,
+          prevSpending + Number(order.price),
+        );
       });
     });
-  
+
     const topCustomerIds = [...customerSpendingMap.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, limit)
       .map(([customerId]) => customerId);
-  
+
     const customers = await this.prisma.customer.findMany({
       where: { id: { in: topCustomerIds } },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-      },
+      ...getTopCustomersBySpending,
     });
-  
-    return customers.map(customer => ({
+
+    return customers.map((customer) => ({
       id: customer.id,
       fullName: customer.fullName,
       email: customer.email,
       totalSpending: customerSpendingMap.get(customer.id) || 0,
     }));
   }
-  
-  private async clearCache(): Promise<void>  {
+
+  private async clearCache(): Promise<void> {
     logger.info('Clearing customer cache');
     const keys = await this.redis.keys('customers:*');
     if (keys.length > 0) {

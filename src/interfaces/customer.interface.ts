@@ -1,10 +1,9 @@
 export interface PaginatedResult<T> {
-    data: T[];
-    totalCount: number;
-    totalPages: number;
-    currentPage: number;
+  data: T[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
-
 
 export interface CustomerStats {
   totalCustomers: number;

@@ -1,8 +1,8 @@
-import { User } from "@prisma/client";
+import { User } from '@prisma/client';
 
 export interface PaginatedUsers {
-    data: User[];
-    totalCount: number;
-    totalPages: number;
-    currentPage: number;
-};
+  data: User[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+}

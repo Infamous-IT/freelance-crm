@@ -1,4 +1,10 @@
-import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { User } from 'src/user/entities/user.entity';
@@ -21,7 +27,7 @@ export class AuthService {
 
   private forgotPasswordCodes = new Map<string, string>();
 
-  async generateTokens(user: User) {
+  generateTokens(user: User) {
     const payload = { sub: user.id, email: user.email };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -34,14 +40,16 @@ export class AuthService {
       secret: process.env.JWT_REFRESH_TOKEN,
     });
 
-    logger.info(`Generated access token and refresh token for user: ${user.email}`);
+    logger.info(
+      `Generated access token and refresh token for user: ${user.email}`,
+    );
     return {
       accessToken,
       refreshToken,
     };
   }
 
-  async validateAccessToken(token: string) {
+  validateAccessToken(token: string) {
     try {
       logger.info(`Validating access token: ${token}`);
       return this.jwtService.verify(token, {
@@ -53,7 +61,10 @@ export class AuthService {
     }
   }
 
-  async comparePassword(enteredPassword: string, storedPassword: string): Promise<boolean> {
+  async comparePassword(
+    enteredPassword: string,
+    storedPassword: string,
+  ): Promise<boolean> {
     logger.info('Comparing passwords');
     return await bcrypt.compare(enteredPassword, storedPassword);
   }
@@ -96,12 +107,12 @@ export class AuthService {
   async login(email: string, password: string): Promise<any> {
     logger.info(`Login attempt for user: ${email}`);
     const user = await this.validateUser(email, password);
-    const tokens = await this.generateTokens(user);
+    const tokens = this.generateTokens(user);
 
     return {
-        message: 'Авторизація пройшла успішно',
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
+      message: 'Авторизація пройшла успішно',
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
     };
   }
 
@@ -135,18 +146,18 @@ export class AuthService {
       throw err;
     }
   }
-  
+
   async verifyEmail(email: string, code: string): Promise<boolean> {
     const storedCode = this.forgotPasswordCodes.get(email);
-    
+
     if (!storedCode) {
       logger.warn(`No verification code found for email ${email}`);
       throw new NotFoundException('Код для підтвердження не знайдено');
     }
 
-    if(storedCode !== code) {
+    if (storedCode !== code) {
       logger.warn(`Invalid verification code for email ${email}`);
-      throw new UnauthorizedException("Код не валідний!");
+      throw new UnauthorizedException('Код не валідний!');
     }
 
     this.forgotPasswordCodes.delete(email);
@@ -157,7 +168,7 @@ export class AuthService {
 
     logger.info(`Email verified for ${email}`);
     return !!updatedUser;
-   }
+  }
 
   async sendVerificationCode(email: string): Promise<void> {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -175,15 +186,19 @@ export class AuthService {
   async sendForgotPassword(email: string) {
     const user = await this.userService.findByEmail(email);
 
-    if(!user) {
+    if (!user) {
       logger.warn(`User with email ${email} not found for password reset`);
-      throw new UnauthorizedException("Користувача не знайдено!");
+      throw new UnauthorizedException('Користувача не знайдено!');
     }
 
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
     this.forgotPasswordCodes.set(email, code);
 
-    await this.emailService.sendEmail(email, 'Код для відновлення паролю', `Ваш код: ${code}`);
+    await this.emailService.sendEmail(
+      email,
+      'Код для відновлення паролю',
+      `Ваш код: ${code}`,
+    );
     logger.info(`Password reset code sent to ${email}`);
     return { message: 'Код відправлено на вашу електронну адресу.' };
   }
@@ -199,14 +214,18 @@ export class AuthService {
     return this.userService.update(user!.id, user!);
   }
 
-  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.userService.findOne(userId);
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       logger.warn(`Old password incorrect for user ${userId}`);
       throw new UnauthorizedException('Старий пароль неправильний');
-    } 
+    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;

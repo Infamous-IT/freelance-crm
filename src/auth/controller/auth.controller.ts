@@ -1,4 +1,11 @@
-import { Body, Controller, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { UserService } from 'src/user/service/user.service';
 import { LoginDto } from '../dto/login.dto';
 import { RegisterDto } from '../dto/register.dto';
@@ -11,13 +18,19 @@ import { Roles } from '../decorators/roles.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService, private readonly userService: UserService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly userService: UserService,
+  ) {}
 
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     try {
       logger.info(`Login attempt for email: ${loginDto.email}`);
-      const result = await this.authService.login(loginDto.email, loginDto.password);
+      const result = await this.authService.login(
+        loginDto.email,
+        loginDto.password,
+      );
       logger.info(`Login successful for email: ${loginDto.email}`);
       return result;
     } catch (error) {
@@ -30,14 +43,20 @@ export class AuthController {
   async register(@Body() registerDto: RegisterDto) {
     logger.info(`Registration attempt for email: ${registerDto.email}`);
     const newUser = await this.authService.register(registerDto);
-    logger.info(`User successfully registered with email: ${registerDto.email}`);
+    logger.info(
+      `User successfully registered with email: ${registerDto.email}`,
+    );
     return { message: 'Користувача успішно зареєстровано', user: newUser };
   }
 
   @Post('refresh')
   async refresh(@Body() refreshDto: { refreshToken: string }) {
-    logger.info(`Refreshing tokens for refreshToken: ${refreshDto.refreshToken}`);
-    const payload = await this.authService.validateAccessToken(refreshDto.refreshToken);
+    logger.info(
+      `Refreshing tokens for refreshToken: ${refreshDto.refreshToken}`,
+    );
+    const payload = await this.authService.validateAccessToken(
+      refreshDto.refreshToken,
+    );
     if (!payload) {
       logger.warn(`Invalid refresh token: ${refreshDto.refreshToken}`);
       throw new UnauthorizedException('Не дійсний Refresh Token');
@@ -52,11 +71,13 @@ export class AuthController {
     const accessToken = req.headers.authorization?.split(' ')[1];
     logger.info(`Logout request for accessToken: ${accessToken}`);
     await this.authService.revokeAccessToken(accessToken);
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
-    logger.info(`User successfully logged out with accessToken: ${accessToken}`);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    logger.info(
+      `User successfully logged out with accessToken: ${accessToken}`,
+    );
     return { message: 'Ви успішно вийшли з системи.' };
   }
-  
+
   @Post('verify-email')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
@@ -88,9 +109,15 @@ export class AuthController {
   }
 
   @Post('update-password')
-  async updateForgotPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+  async updateForgotPassword(
+    @Body() body: { email: string; code: string; newPassword: string },
+  ) {
     logger.info(`Updating password for email: ${body.email}`);
-    const result = await this.authService.updateForgotPassword(body.email, body.code, body.newPassword);
+    const result = await this.authService.updateForgotPassword(
+      body.email,
+      body.code,
+      body.newPassword,
+    );
     logger.info(`Password successfully updated for email: ${body.email}`);
     return result;
   }
@@ -98,9 +125,16 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  async changePassword(@Req() req, @Body() body: { oldPassword: string; newPassword: string }) {
+  async changePassword(
+    @Req() req,
+    @Body() body: { oldPassword: string; newPassword: string },
+  ) {
     logger.info(`Password change request for user: ${req.user.id}`);
-    const result = await this.authService.changePassword(req.user.id, body.oldPassword, body.newPassword);
+    const result = await this.authService.changePassword(
+      req.user.id,
+      body.oldPassword,
+      body.newPassword,
+    );
     logger.info(`Password successfully changed for user: ${req.user.id}`);
     return result;
   }

@@ -8,6 +8,6 @@ import { UserService } from './service/user.service';
   imports: [PrismaModule, JwtModule],
   controllers: [UserController],
   providers: [UserService],
-  exports: [UserService]
+  exports: [UserService],
 })
 export class UserModule {}

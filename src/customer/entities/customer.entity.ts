@@ -1,43 +1,43 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { Order } from "@prisma/client";
+import { ApiProperty } from '@nestjs/swagger';
+import { Order } from '@prisma/client';
 
 export class Customer {
-    @ApiProperty({
-        example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
-        description: 'Унікальний ідентифікатор замовника (UUID)',
-      })
-    id: string;
+  @ApiProperty({
+    example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
+    description: 'Унікальний ідентифікатор замовника (UUID)',
+  })
+  id: string;
 
-    @ApiProperty({
-        example: 'Nazar Замовник',
-        description: 'Імʼя та прізвище замовника',
-      })
-    fullName: string;
+  @ApiProperty({
+    example: 'Nazar Замовник',
+    description: 'Імʼя та прізвище замовника',
+  })
+  fullName: string;
 
-    @ApiProperty({
-        example: 'test@gmail.com',
-        description: 'Електронна адреса замовника',
-      })
-    email?: string;
+  @ApiProperty({
+    example: 'test@gmail.com',
+    description: 'Електронна адреса замовника',
+  })
+  email?: string;
 
-    @ApiProperty({
-        example: 't.me/test',
-        description: 'Телеграм замовника',
-      })
-    telegram?: string;
+  @ApiProperty({
+    example: 't.me/test',
+    description: 'Телеграм замовника',
+  })
+  telegram?: string;
 
-    @ApiProperty({
-        example: 'Test IT Solution',
-        description: 'Компанія замовника',
-      })
-    company?: string;
+  @ApiProperty({
+    example: 'Test IT Solution',
+    description: 'Компанія замовника',
+  })
+  company?: string;
 
-    @ApiProperty({
-        example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
-        description: 'Унікальний ідентифікатор замовлення',
-      })
-    orderIds?: string[];
+  @ApiProperty({
+    example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
+    description: 'Унікальний ідентифікатор замовлення',
+  })
+  orderIds?: string[];
 
-    @ApiProperty()
-    order?: Order;
+  @ApiProperty()
+  order?: Order;
 }

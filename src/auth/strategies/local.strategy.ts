@@ -15,7 +15,10 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
 
   async validate(email: string, password: string) {
     const user = await this.userService.findByEmail(email);
-    if (!user || !(await this.authService.comparePassword(password, user.password))) {
+    if (
+      !user ||
+      !(await this.authService.comparePassword(password, user.password))
+    ) {
       throw new Error('Невірні дані');
     }
     return user;

@@ -19,7 +19,7 @@ import { LocalStrategy } from './strategies/local.strategy';
       secret: process.env.JWT_SECRET_TOKEN,
       signOptions: { expiresIn: process.env.EXPIRATION_TIME_FOR_ACCESS_TOKEN },
     }),
-    RedisModule
+    RedisModule,
   ],
   providers: [
     AuthService,
@@ -29,9 +29,9 @@ import { LocalStrategy } from './strategies/local.strategy';
     LocalAuthGuard,
     EmailService,
     PrismaService,
-    RolesGuard
+    RolesGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService]
+  exports: [AuthService],
 })
 export class AuthModule {}

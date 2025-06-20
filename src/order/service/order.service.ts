@@ -5,14 +5,23 @@ import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import logger from 'src/logger/logger';
 import { Order } from '@prisma/client';
-import { OrderStats, PaginatedOrders, TopExpensiveOrder } from 'src/interfaces/order.interface';
+import {
+  OrderStats,
+  PaginatedOrders,
+  TopExpensiveOrder,
+} from 'src/interfaces/order.interface';
+import {
+  OrderWithRelationIncludes,
+  orderWithRelationIncludes,
+  orderWithSelectIncludes,
+} from '../types/order-prisma-types.interface';
 
 @Injectable()
 export class OrderService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
-    ) {}
+  ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
     const { startDate, endDate, ...otherFields } = createOrderDto;
@@ -20,7 +29,9 @@ export class OrderService {
     const formattedStartDate = this.convertDateToISO(startDate);
     const formattedEndDate = this.convertDateToISO(endDate);
 
-    logger.info(`Creating new order with startDate: ${formattedStartDate} and endDate: ${formattedEndDate}`);
+    logger.info(
+      `Creating new order with startDate: ${formattedStartDate} and endDate: ${formattedEndDate}`,
+    );
 
     const order = await this.prisma.order.create({
       data: {
@@ -35,6 +46,7 @@ export class OrderService {
     return order;
   }
 
+  // TODO: used Prisma.validator
   async findAll(page: number = 1): Promise<PaginatedOrders> {
     const take = 20;
     page = parseInt(String(page), 10);
@@ -47,14 +59,14 @@ export class OrderService {
       logger.info(`Cache hit for orders on page ${page}`);
       return JSON.parse(cachedData);
     }
-    
+
     logger.info(`Cache miss. Fetching orders from DB for page ${page}`);
 
     const [orders, totalCount] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         skip,
         take,
-        include: { customers: true, user: true },
+        ...orderWithRelationIncludes,
       }),
       this.prisma.order.count(),
     ]);
@@ -72,29 +84,39 @@ export class OrderService {
     return result;
   }
 
-  async findOne(id: string): Promise<Order | null> {
+  async findOne(id: string): Promise<OrderWithRelationIncludes | null> {
     logger.info(`Fetching order with ID: ${id}`);
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { customers: true, user: true },
+      ...orderWithRelationIncludes,
     });
     logger.info(`Order fetched with ID: ${id}`);
     return order;
   }
 
-  async update(id: string, userId: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
+  async update(
+    id: string,
+    userId: string,
+    updateOrderDto: UpdateOrderDto,
+  ): Promise<Order> {
     const order = await this.prisma.order.findUnique({
       where: { id },
     });
 
-    if(!order) {
+    if (!order) {
       logger.error(`Order not found for ID: ${id}`);
-      throw new ForbiddenException('Замовлення з таким ідентифікатором не знайдено!');
+      throw new ForbiddenException(
+        'Замовлення з таким ідентифікатором не знайдено!',
+      );
     }
 
-    if(order.userId !== userId) {
-      logger.error(`User with ID: ${userId} tried to update another user's order with ID: ${id}`);
-      throw new ForbiddenException('Ви не можете редагувати це замовлення, тому що ви не створювали його!');
+    if (order.userId !== userId) {
+      logger.error(
+        `User with ID: ${userId} tried to update another user's order with ID: ${id}`,
+      );
+      throw new ForbiddenException(
+        'Ви не можете редагувати це замовлення, тому що ви не створювали його!',
+      );
     }
 
     const { startDate, endDate, ...otherFields } = updateOrderDto;
@@ -128,12 +150,18 @@ export class OrderService {
 
     if (!order) {
       logger.error(`Order not found for deletion with ID: ${id}`);
-      throw new ForbiddenException('Замовлення з таким ідентифікатором не знайдено!');
+      throw new ForbiddenException(
+        'Замовлення з таким ідентифікатором не знайдено!',
+      );
     }
 
     if (order.userId !== userId) {
-      logger.error(`User with ID: ${userId} tried to delete another user's order with ID: ${id}`);
-      throw new ForbiddenException('Ви не можете видалити це замовлення, тому що ви не створювали його!');
+      logger.error(
+        `User with ID: ${userId} tried to delete another user's order with ID: ${id}`,
+      );
+      throw new ForbiddenException(
+        'Ви не можете видалити це замовлення, тому що ви не створювали його!',
+      );
     }
 
     const deletedOrder = await this.prisma.order.delete({ where: { id } });
@@ -143,10 +171,18 @@ export class OrderService {
     return deletedOrder;
   }
 
-  async getUserOrderStats(userId: string, requestingUserId: string, isAdmin: boolean): Promise<OrderStats> {
-    if(!isAdmin && userId !== requestingUserId) {
-      logger.error(`User with ID: ${requestingUserId} attempted to access stats of user with ID: ${userId}`);
-      throw new ForbiddenException('У вас немає доступу до даних інших користувачів.');
+  async getUserOrderStats(
+    userId: string,
+    requestingUserId: string,
+    isAdmin: boolean,
+  ): Promise<OrderStats> {
+    if (!isAdmin && userId !== requestingUserId) {
+      logger.error(
+        `User with ID: ${requestingUserId} attempted to access stats of user with ID: ${userId}`,
+      );
+      throw new ForbiddenException(
+        'У вас немає доступу до даних інших користувачів.',
+      );
     }
 
     const stats = await this.prisma.order.aggregate({
@@ -162,15 +198,21 @@ export class OrderService {
     };
   }
 
-  async getTopExpensiveOrders(userId: string, isAdmin: boolean, limit: number = 5): Promise<TopExpensiveOrder[]> {
-    logger.info(`Fetching top ${limit} expensive orders for user ID: ${userId}`);
+  async getTopExpensiveOrders(
+    userId: string,
+    isAdmin: boolean,
+    limit: number = 5,
+  ): Promise<TopExpensiveOrder[]> {
+    logger.info(
+      `Fetching top ${limit} expensive orders for user ID: ${userId}`,
+    );
     const orders = await this.prisma.order.findMany({
       where: isAdmin ? {} : { userId },
       orderBy: { price: 'desc' },
       take: limit,
-      select: { id: true, title: true, price: true },
+      ...orderWithSelectIncludes,
     });
-    return orders.map(order => ({
+    return orders.map((order) => ({
       ...order,
       price: order.price.toNumber(),
     }));

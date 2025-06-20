@@ -2,64 +2,80 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import * as bcrypt from 'bcrypt';
-import { Order, Prisma, User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { RedisClientType } from 'redis';
 import logger from 'src/logger/logger';
 import { PaginatedUsers } from 'src/interfaces/user.interface';
+import {
+  userWithOrderIncludes,
+  UserWithOrderIncludesType,
+} from '../types/user-prisma-types.interface';
+import {
+  OrderWithCustomerIncludes,
+  orderWithCustomerIncludes,
+} from '../../order/types/order-prisma-types.interface';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
-    ){}
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     try {
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const user = await this.prisma.user.create({
-      data: {
-        ...createUserDto,
-        password: hashedPassword,
-      },
-    });
-    await this.clearCache();
+      const user = await this.prisma.user.create({
+        data: {
+          ...createUserDto,
+        },
+      });
+      await this.clearCache();
 
-    logger.info(`User created: ${user.id} - ${user.email}`);
-    return user;
-    } catch (error) {
-      logger.error(`Error when we creating user: ${error.message}`);
+      logger.info(`User created: ${user.id} - ${user.email}`);
+      return user;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(`Error when we creating user: ${errorMessage}`);
       throw error;
-    };
+    }
   }
 
+  // TODO: used Prisma.validator and use types or dto for arguments
   async findAll(
     page: number = 1,
     pageSize: number = 20,
     sortBy: keyof User = 'email',
     sortOrder: 'asc' | 'desc' = 'asc',
-    filterDto?: Partial<Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>>
+    filterDto?: Partial<
+      Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>
+    >,
   ): Promise<PaginatedUsers> {
     const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
     const cachedData = await this.redis.get(cacheKey);
-    if(cachedData) {
+    if (cachedData) {
       logger.info(`Cache hit for key: ${cacheKey}`);
-      return JSON.parse(cachedData);
+      return JSON.parse(cachedData) as PaginatedUsers;
     }
 
     pageSize = parseInt(String(pageSize), 10);
     const skip = (page - 1) * pageSize;
-  
+
     const { email, firstName, lastName, country } = filterDto || {};
-  
+
     const where: Prisma.UserWhereInput = {
       ...(email ? { email: { contains: email, mode: 'insensitive' } } : {}),
-      ...(firstName ? { firstName: { contains: firstName, mode: 'insensitive' } } : {}),
-      ...(lastName ? { lastName: { contains: lastName, mode: 'insensitive' } } : {}),
-      ...(country ? { country: { contains: country, mode: 'insensitive' } } : {}),
+      ...(firstName
+        ? { firstName: { contains: firstName, mode: 'insensitive' } }
+        : {}),
+      ...(lastName
+        ? { lastName: { contains: lastName, mode: 'insensitive' } }
+        : {}),
+      ...(country
+        ? { country: { contains: country, mode: 'insensitive' } }
+        : {}),
     };
-  
+
     const orderBy = { [sortBy]: sortOrder };
 
     const [users, totalCount] = await this.prisma.$transaction([
@@ -80,7 +96,9 @@ export class UserService {
     };
 
     await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-    logger.info(`Found ${users.length} users for page ${page} with size ${pageSize}`);
+    logger.info(
+      `Found ${users.length} users for page ${page} with size ${pageSize}`,
+    );
 
     return result;
   }
@@ -93,12 +111,10 @@ export class UserService {
     }
   }
 
-  async findOne(id: string): Promise<User & { orders: Order[ ]}> {
+  async findOne(id: string): Promise<UserWithOrderIncludesType> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: {
-        orders: true,
-      }
+      ...userWithOrderIncludes,
     });
     if (!user) {
       logger.warn(`User with ID ${id} not found`);
@@ -108,50 +124,62 @@ export class UserService {
     return user;
   }
 
-  async getUserOrderWithUser(userId: string): Promise<(User & { orders: Order[] }) | null> {
-    logger.info(`Received request to get user with orders for user ID: ${userId}`);
+  async getUserOrderWithUser(
+    userId: string,
+  ): Promise<UserWithOrderIncludesType | null> {
+    logger.info(
+      `Received request to get user with orders for user ID: ${userId}`,
+    );
     const userWithOrders = await this.prisma.user.findUnique({
-      where: { 
-        id: userId
-       },
-      include: {
-        orders: true
+      where: {
+        id: userId,
       },
+      ...userWithOrderIncludes,
     });
 
     if (userWithOrders) {
-      logger.info(`Found user with ID: ${userId} and ${userWithOrders.orders.length} orders`);
+      logger.info(
+        `Found user with ID: ${userId} and ${userWithOrders.orders.length} orders`,
+      );
     } else {
       logger.warn(`User with ID: ${userId} not found`);
     }
-    
+
     return userWithOrders;
   }
 
-  async getUserOrderWithCustomers(userId: string): Promise<Order[]> {
-    logger.info(`Received request to get orders with customers for user ID: ${userId}`);
+  async getUserOrderWithCustomers(
+    userId: string,
+  ): Promise<OrderWithCustomerIncludes[]> {
+    logger.info(
+      `Received request to get orders with customers for user ID: ${userId}`,
+    );
     const orders = await this.prisma.order.findMany({
       where: { userId },
-      include: {
-        customers: true
-      }
+      ...orderWithCustomerIncludes,
     });
-  
+
     logger.info(`Found ${orders.length} orders for user ID: ${userId}`);
     return orders;
   }
 
   async getUserCustomerStats(userId: string): Promise<number> {
-    logger.info(`Received request to get customer stats for user ID: ${userId}`);
+    logger.info(
+      `Received request to get customer stats for user ID: ${userId}`,
+    );
     const orders = await this.prisma.order.findMany({
       where: { userId },
-      include: { customers: true },
+      ...orderWithCustomerIncludes,
     });
 
     const uniqueCustomers = new Set(
-      orders.flatMap(order => order.customers?.map(customer => customer.id)).filter(id => id != null)
+      orders
+        .flatMap((order) => order.customers?.map((customer) => customer.id))
+        .filter((id) => id != null),
     );
-    logger.info(`Found ${uniqueCustomers.size} unique customers for user ID: ${userId}`);
+    logger.info(
+      `Found ${uniqueCustomers.size} unique customers for user ID: ${userId}`,
+    );
     return uniqueCustomers.size;
   }
 

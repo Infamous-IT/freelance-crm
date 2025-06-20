@@ -1,10 +1,10 @@
-import { Order } from "@prisma/client";
+import { Order } from '@prisma/client';
 
 export interface PaginatedOrders {
-    data: Order[];
-    totalCount: number;
-    totalPages: number;
-    currentPage: number;
+  data: Order[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
 
 export interface OrderStats {
