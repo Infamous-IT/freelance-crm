@@ -18,19 +18,19 @@ export class Customer {
     example: 'test@gmail.com',
     description: 'Електронна адреса замовника',
   })
-  email?: string;
+  email: string | null;
 
   @ApiProperty({
     example: 't.me/test',
     description: 'Телеграм замовника',
   })
-  telegram?: string;
+  telegram: string | null; 
 
   @ApiProperty({
     example: 'Test IT Solution',
     description: 'Компанія замовника',
   })
-  company?: string;
+  company: string | null;
 
   @ApiProperty({
     example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
@@ -39,5 +39,5 @@ export class Customer {
   orderIds?: string[];
 
   @ApiProperty()
-  order?: Order;
+  order?: Order[];
 }

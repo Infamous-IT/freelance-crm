@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -20,11 +21,16 @@ import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
 import { Order, Role } from '@prisma/client';
 import { PaginatedUsers } from 'src/modules/user/interfaces/user.interface';
+import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
+import { GetUsersDto } from '../dto/get-users.dto';
+import { PaginatedTransformInterceptor } from 'src/app/interceptors/paginated-transform.interceptor';
 
 @ApiTags('Users')
 @Controller('user')
-export class UserController {
-  constructor(private readonly userService: UserService) {}
+export class UserController extends AbstractController {
+  constructor(private readonly userService: UserService) {
+    super();
+  }
 
   @Post()
   @ApiOperation({ summary: 'Створити нового користувача' })
@@ -41,28 +47,18 @@ export class UserController {
   }
 
   @Get()
+  @UseInterceptors( new PaginatedTransformInterceptor( User ) )
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  async findAll(
+  async getAllPaginated(
+    @Query() getUsersDto: GetUsersDto,
     @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-    @Query('sortBy') sortBy: keyof User = 'email',
-    @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'asc',
-    @Query()
-    filterDto?: Partial<
-      Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>
-    >,
+    @Query('perPage') perPage: number = 20,
   ): Promise<PaginatedUsers> {
-    logger.info(`Fetching users: page=${page}, pageSize=${pageSize}`);
-    return this.userService.findAll(
-      page,
-      pageSize,
-      sortBy,
-      sortOrder,
-      filterDto,
-    );
+    logger.info(`Fetching users with filters: ${JSON.stringify(getUsersDto)}`);
+    return this.userService.findAll(getUsersDto, page, perPage);
   }
 
   @Get(':id')
@@ -75,42 +71,6 @@ export class UserController {
     const user = await this.userService.findOne(id);
     logger.info(`User found: ${user.id} - ${user.email}`);
     return user;
-  }
-
-  @Get('orders/:userId')
-  @ApiOperation({ summary: 'Отримати замовлення користувача за його ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Користувач та його замовлення знайдено',
-    type: User,
-  })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.FREELANCER)
-  async getUserOrderWithUser(
-    @Param('userId') userId: string,
-  ): Promise<Order[]> {
-    logger.info(`Received request to get orders for user with ID: ${userId}`);
-    const orders = await this.userService.getUserOrderWithCustomers(userId);
-    logger.info(`Found ${orders.length} orders for user with ID: ${userId}`);
-    return orders;
-  }
-
-  @Get('customer-stats/:userId')
-  @ApiOperation({ summary: 'Отримати статистику по замовниках користувача' })
-  @ApiResponse({
-    status: 200,
-    description: 'Статистика по замовниках користувача',
-    type: Number,
-  })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.FREELANCER)
-  async getUserCustomerStats(@Param('userId') userId: string): Promise<number> {
-    logger.info(
-      `Received request to get customer stats for user with ID: ${userId}`,
-    );
-    const stats = await this.userService.getUserCustomerStats(userId);
-    logger.info(`Customer stats for user with ID: ${userId}: ${stats}`);
-    return stats;
   }
 
   @Patch(':id')

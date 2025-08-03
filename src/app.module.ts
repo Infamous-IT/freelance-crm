@@ -11,6 +11,7 @@ import { WinstonModule } from 'nest-winston';
 import logger from './common/logger/logger';
 import { NestModule } from '@nestjs/common';
 import { LoggerMiddleware } from './common/logger/LoggerMiddleware';
+import { StatisticsModule } from './modules/statistics/statistics.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { LoggerMiddleware } from './common/logger/LoggerMiddleware';
     OrderModule,
     CustomerModule,
     AuthModule,
+    StatisticsModule,
     RedisModule,
     WinstonModule.forRoot({
       transports: logger.transports,

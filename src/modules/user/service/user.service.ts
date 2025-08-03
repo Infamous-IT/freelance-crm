@@ -1,5 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/common/prisma/prisma.service';
+import { Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { Prisma, User } from '@prisma/client';
@@ -10,21 +9,22 @@ import {
   userWithOrderIncludes,
   UserWithOrderIncludesType,
 } from '../types/user-prisma-types.interface';
-import {
-  OrderWithCustomerIncludes,
-  orderWithCustomerIncludes,
-} from '../../order/types/order-prisma-types.interface';
+import { UserRepository } from '../repository/user.repository';
+import { PrismaService } from 'src/common/prisma/prisma.service';
+import { paginate } from 'src/common/pagination/paginator';
+import { GetUsersDto } from '../dto/get-users.dto';
 
 @Injectable()
 export class UserService {
   constructor(
+    private readonly userRepository: UserRepository,
     private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     try {
-      const user = await this.prisma.user.create({
+      const user = await this.userRepository.create({
         data: {
           ...createUserDto,
         },
@@ -42,65 +42,137 @@ export class UserService {
   }
 
   // TODO: used Prisma.validator and use types or dto for arguments
+  // async findAll(
+  //   page: number = 1,
+  //   pageSize: number = 20,
+  //   sortBy: keyof User = 'email',
+  //   sortOrder: 'asc' | 'desc' = 'asc',
+  //   filterDto?: Partial<
+  //     Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>
+  //   >,
+  // ): Promise<PaginatedUsers> {
+  //   const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
+  //   const cachedData = await this.redis.get(cacheKey);
+  //   if (cachedData) {
+  //     logger.info(`Cache hit for key: ${cacheKey}`);
+  //     return JSON.parse(cachedData) as PaginatedUsers;
+  //   }
+
+  //   pageSize = parseInt(String(pageSize), 10);
+  //   const skip = (page - 1) * pageSize;
+
+  //   const { email, firstName, lastName, country } = filterDto || {};
+
+  //   const where: Prisma.UserWhereInput = {
+  //     ...(email ? { email: { contains: email, mode: 'insensitive' } } : {}),
+  //     ...(firstName
+  //       ? { firstName: { contains: firstName, mode: 'insensitive' } }
+  //       : {}),
+  //     ...(lastName
+  //       ? { lastName: { contains: lastName, mode: 'insensitive' } }
+  //       : {}),
+  //     ...(country
+  //       ? { country: { contains: country, mode: 'insensitive' } }
+  //       : {}),
+  //   };
+
+  //   const orderBy = { [sortBy]: sortOrder };
+
+  //   const [users, totalCount] = await this.prisma.$transaction([
+  //     this.prisma.user.findMany({
+  //       where,
+  //       skip,
+  //       take: pageSize,
+  //       orderBy,
+  //     }),
+  //     this.prisma.user.count({ where }),
+  //   ]);
+
+  //   const result = {
+  //     data: users,
+  //     totalCount,
+  //     totalPages: Math.ceil(totalCount / pageSize),
+  //     currentPage: page,
+  //   };
+
+  //   await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
+  //   logger.info(
+  //     `Found ${users.length} users for page ${page} with size ${pageSize}`,
+  //   );
+
+  //   return result;
+  // }
+
   async findAll(
-    page: number = 1,
-    pageSize: number = 20,
-    sortBy: keyof User = 'email',
-    sortOrder: 'asc' | 'desc' = 'asc',
-    filterDto?: Partial<
-      Pick<User, 'email' | 'firstName' | 'lastName' | 'country'>
-    >,
+    param: GetUsersDto,
+    page: number,
+    perPage: number
   ): Promise<PaginatedUsers> {
-    const cacheKey = `users:page=${page}:size=${pageSize}:sortBy=${sortBy}:order=${sortOrder}:filters=${JSON.stringify(filterDto)}`;
-    const cachedData = await this.redis.get(cacheKey);
-    if (cachedData) {
-      logger.info(`Cache hit for key: ${cacheKey}`);
-      return JSON.parse(cachedData) as PaginatedUsers;
+    const { searchText, orderBy, role, country } = param;
+  
+    const terms = searchText ?
+      searchText
+        .trim()
+        .split(/\s+/)
+        .filter(term => term.length > 0) : null;
+  
+    const orConditions: Prisma.UserWhereInput[] | null = terms ? terms.flatMap(term => [
+      {
+        firstName: {
+          contains: term, mode: 'insensitive'
+        }
+      },
+      {
+        lastName: {
+          contains: term, mode: 'insensitive'
+        }
+      },
+      {
+        email: {
+          contains: term, mode: 'insensitive'
+        }
+      }
+    ]) : null;
+  
+    try {
+      const users = await paginate(
+        this.userRepository,
+        {
+          where: {
+            ...(searchText && {
+              OR: orConditions
+            }),
+            ...(role && { role }),
+            ...(country && {
+              country: {
+                contains: country, mode: 'insensitive'
+              }
+            })
+          },
+          ...(orderBy ? {
+            orderBy: {
+              [orderBy.field]: orderBy.sorting || 'asc'
+            }
+          } : {}),
+          include: {
+            orders: true
+          }
+        },
+        {
+          page,
+          perPage
+        }
+      );
+  
+      return {
+        data: users.data as User[],
+        totalCount: users.meta.total,
+        totalPages: users.meta.lastPage,
+        currentPage: users.meta.currentPage,
+      };
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException();
     }
-
-    pageSize = parseInt(String(pageSize), 10);
-    const skip = (page - 1) * pageSize;
-
-    const { email, firstName, lastName, country } = filterDto || {};
-
-    const where: Prisma.UserWhereInput = {
-      ...(email ? { email: { contains: email, mode: 'insensitive' } } : {}),
-      ...(firstName
-        ? { firstName: { contains: firstName, mode: 'insensitive' } }
-        : {}),
-      ...(lastName
-        ? { lastName: { contains: lastName, mode: 'insensitive' } }
-        : {}),
-      ...(country
-        ? { country: { contains: country, mode: 'insensitive' } }
-        : {}),
-    };
-
-    const orderBy = { [sortBy]: sortOrder };
-
-    const [users, totalCount] = await this.prisma.$transaction([
-      this.prisma.user.findMany({
-        where,
-        skip,
-        take: pageSize,
-        orderBy,
-      }),
-      this.prisma.user.count({ where }),
-    ]);
-
-    const result = {
-      data: users,
-      totalCount,
-      totalPages: Math.ceil(totalCount / pageSize),
-      currentPage: page,
-    };
-
-    await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-    logger.info(
-      `Found ${users.length} users for page ${page} with size ${pageSize}`,
-    );
-
-    return result;
   }
 
   async clearCache(): Promise<void> {
@@ -112,7 +184,7 @@ export class UserService {
   }
 
   async findOne(id: string): Promise<UserWithOrderIncludesType> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.userRepository.findUnique({
       where: { id },
       ...userWithOrderIncludes,
     });
@@ -130,7 +202,7 @@ export class UserService {
     logger.info(
       `Received request to get user with orders for user ID: ${userId}`,
     );
-    const userWithOrders = await this.prisma.user.findUnique({
+    const userWithOrders = await this.userRepository.findUnique({
       where: {
         id: userId,
       },
@@ -148,52 +220,17 @@ export class UserService {
     return userWithOrders;
   }
 
-  async getUserOrderWithCustomers(
-    userId: string,
-  ): Promise<OrderWithCustomerIncludes[]> {
-    logger.info(
-      `Received request to get orders with customers for user ID: ${userId}`,
-    );
-    const orders = await this.prisma.order.findMany({
-      where: { userId },
-      ...orderWithCustomerIncludes,
-    });
-
-    logger.info(`Found ${orders.length} orders for user ID: ${userId}`);
-    return orders;
-  }
-
-  async getUserCustomerStats(userId: string): Promise<number> {
-    logger.info(
-      `Received request to get customer stats for user ID: ${userId}`,
-    );
-    const orders = await this.prisma.order.findMany({
-      where: { userId },
-      ...orderWithCustomerIncludes,
-    });
-
-    const uniqueCustomers = new Set(
-      orders
-        .flatMap((order) => order.customers?.map((customer) => customer.id))
-        .filter((id) => id != null),
-    );
-    logger.info(
-      `Found ${uniqueCustomers.size} unique customers for user ID: ${userId}`,
-    );
-    return uniqueCustomers.size;
-  }
-
   async findByEmail(email: string): Promise<User | null> {
-    return await this.prisma.user.findUnique({ where: { email } });
+    return await this.userRepository.findUnique({ where: { email } });
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const existingUser = await this.prisma.user.findUnique({ where: { id } });
+    const existingUser = await this.userRepository.findUnique({ where: { id } });
     if (!existingUser) {
       logger.warn(`User with ID ${id} not found for update`);
       throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
     }
-    const user = await this.prisma.user.update({
+    const user = await this.userRepository.update({
       where: { id },
       data: updateUserDto,
     });
@@ -203,7 +240,7 @@ export class UserService {
   }
 
   async remove(id: string): Promise<User> {
-    const user = await this.prisma.user.delete({
+    const user = await this.userRepository.delete({
       where: { id },
     });
     await this.clearCache();

@@ -1,24 +1,23 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { OrderRepository } from './../repository/order.repository';
+import { ForbiddenException, Inject, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { RedisClientType } from 'redis';
-import { PrismaService } from 'src/common/prisma/prisma.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import logger from 'src/common/logger/logger';
-import { Order } from '@prisma/client';
-import {
-  OrderStats,
-  PaginatedOrders,
-  TopExpensiveOrder,
-} from 'src/modules/order/interfaces/order.interface';
+import { Order, Prisma } from '@prisma/client';
+import { PaginatedOrders } from 'src/modules/order/interfaces/order.interface';
 import {
   OrderWithRelationIncludes,
-  orderWithRelationIncludes,
-  orderWithSelectIncludes,
+  orderWithRelationIncludes
 } from '../types/order-prisma-types.interface';
+import { PrismaService } from 'src/common/prisma/prisma.service';
+import { paginate } from 'src/common/pagination/paginator';
+import { GetOrdersDto } from '../dto/get-orders.dto';
 
 @Injectable()
 export class OrderService {
   constructor(
+    private readonly orderRepository: OrderRepository,
     private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
@@ -33,7 +32,7 @@ export class OrderService {
       `Creating new order with startDate: ${formattedStartDate} and endDate: ${formattedEndDate}`,
     );
 
-    const order = await this.prisma.order.create({
+    const order = await this.orderRepository.create({
       data: {
         ...otherFields,
         startDate: formattedStartDate,
@@ -47,46 +46,110 @@ export class OrderService {
   }
 
   // TODO: used Prisma.validator
-  async findAll(page: number = 1): Promise<PaginatedOrders> {
-    const take = 20;
-    page = parseInt(String(page), 10);
-    const skip = (page - 1) * take;
+  // async findAll(page: number = 1): Promise<PaginatedOrders> {
+  //   const take = 20;
+  //   page = parseInt(String(page), 10);
+  //   const skip = (page - 1) * take;
 
-    const cacheKey = `orders:page=${page}:size=${take}`;
-    const cachedData = await this.redis.get(cacheKey);
+  //   const cacheKey = `orders:page=${page}:size=${take}`;
+  //   const cachedData = await this.redis.get(cacheKey);
 
-    if (cachedData) {
-      logger.info(`Cache hit for orders on page ${page}`);
-      return JSON.parse(cachedData);
+  //   if (cachedData) {
+  //     logger.info(`Cache hit for orders on page ${page}`);
+  //     return JSON.parse(cachedData);
+  //   }
+
+  //   logger.info(`Cache miss. Fetching orders from DB for page ${page}`);
+
+  //   const [orders, totalCount] = await this.prisma.$transaction([
+  //     this.prisma.order.findMany({
+  //       skip,
+  //       take,
+  //       ...orderWithRelationIncludes,
+  //     }),
+  //     this.prisma.order.count(),
+  //   ]);
+
+  //   const result = {
+  //     data: orders,
+  //     totalCount,
+  //     totalPages: Math.ceil(totalCount / take),
+  //     currentPage: page,
+  //   };
+
+  //   await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
+
+  //   logger.info(`Fetched orders for page ${page}, totalCount: ${totalCount}`);
+  //   return result;
+  // }
+  async findAll(
+    param: GetOrdersDto,
+    page: number,
+    perPage: number
+  ): Promise<PaginatedOrders> {
+    const { searchText, orderBy, category, status, userId } = param;
+  
+    const terms = searchText ?
+      searchText
+        .trim()
+        .split(/\s+/)
+        .filter(term => term.length > 0) : null;
+  
+    const orConditions: Prisma.OrderWhereInput[] | null = terms ? terms.flatMap(term => [
+      {
+        title: {
+          contains: term, mode: 'insensitive'
+        }
+      },
+      {
+        description: {
+          contains: term, mode: 'insensitive'
+        }
+      }
+    ]) : null;
+  
+    try {
+      const orders = await paginate(
+        this.orderRepository,
+        {
+          where: {
+            ...(searchText && {
+              OR: orConditions
+            }),
+            ...(category && { category }),
+            ...(status && { status }),
+            ...(userId && { userId })
+          },
+          ...(orderBy ? {
+            orderBy: {
+              [orderBy.field]: orderBy.sorting || 'asc'
+            }
+          } : {}),
+          include: {
+            user: true,
+            customers: true
+          }
+        },
+        {
+          page,
+          perPage
+        }
+      );
+  
+      return {
+        data: orders.data as Order[],
+        totalCount: orders.meta.total,
+        totalPages: orders.meta.lastPage,
+        currentPage: orders.meta.currentPage,
+      };
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException();
     }
-
-    logger.info(`Cache miss. Fetching orders from DB for page ${page}`);
-
-    const [orders, totalCount] = await this.prisma.$transaction([
-      this.prisma.order.findMany({
-        skip,
-        take,
-        ...orderWithRelationIncludes,
-      }),
-      this.prisma.order.count(),
-    ]);
-
-    const result = {
-      data: orders,
-      totalCount,
-      totalPages: Math.ceil(totalCount / take),
-      currentPage: page,
-    };
-
-    await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-
-    logger.info(`Fetched orders for page ${page}, totalCount: ${totalCount}`);
-    return result;
   }
 
   async findOne(id: string): Promise<OrderWithRelationIncludes | null> {
     logger.info(`Fetching order with ID: ${id}`);
-    const order = await this.prisma.order.findUnique({
+    const order = await this.orderRepository.findUnique({
       where: { id },
       ...orderWithRelationIncludes,
     });
@@ -99,7 +162,7 @@ export class OrderService {
     userId: string,
     updateOrderDto: UpdateOrderDto,
   ): Promise<Order> {
-    const order = await this.prisma.order.findUnique({
+    const order = await this.orderRepository.findUnique({
       where: { id },
     });
 
@@ -133,7 +196,7 @@ export class OrderService {
       dataToUpdate.endDate = this.convertDateToISO(endDate);
     }
 
-    const updatedOrder = await this.prisma.order.update({
+    const updatedOrder = await this.orderRepository.update({
       where: { id },
       data: updateOrderDto,
     });
@@ -144,7 +207,7 @@ export class OrderService {
   }
 
   async remove(id: string, userId: string): Promise<Order> {
-    const order = await this.prisma.order.findUnique({
+    const order = await this.orderRepository.findUnique({
       where: { id },
     });
 
@@ -164,58 +227,11 @@ export class OrderService {
       );
     }
 
-    const deletedOrder = await this.prisma.order.delete({ where: { id } });
+    const deletedOrder = await this.orderRepository.delete({ where: { id } });
 
     await this.clearCache();
     logger.info(`Order deleted successfully with ID: ${id}`);
     return deletedOrder;
-  }
-
-  async getUserOrderStats(
-    userId: string,
-    requestingUserId: string,
-    isAdmin: boolean,
-  ): Promise<OrderStats> {
-    if (!isAdmin && userId !== requestingUserId) {
-      logger.error(
-        `User with ID: ${requestingUserId} attempted to access stats of user with ID: ${userId}`,
-      );
-      throw new ForbiddenException(
-        'У вас немає доступу до даних інших користувачів.',
-      );
-    }
-
-    const stats = await this.prisma.order.aggregate({
-      where: { userId },
-      _count: { id: true },
-      _sum: { price: true },
-    });
-
-    logger.info(`Fetched stats for user with ID: ${userId}`);
-    return {
-      totalOrders: stats._count.id,
-      totalEarnings: stats._sum.price?.toNumber() ?? 0,
-    };
-  }
-
-  async getTopExpensiveOrders(
-    userId: string,
-    isAdmin: boolean,
-    limit: number = 5,
-  ): Promise<TopExpensiveOrder[]> {
-    logger.info(
-      `Fetching top ${limit} expensive orders for user ID: ${userId}`,
-    );
-    const orders = await this.prisma.order.findMany({
-      where: isAdmin ? {} : { userId },
-      orderBy: { price: 'desc' },
-      take: limit,
-      ...orderWithSelectIncludes,
-    });
-    return orders.map((order) => ({
-      ...order,
-      price: order.price.toNumber(),
-    }));
   }
 
   private convertDateToISO(date: string): string {

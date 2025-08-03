@@ -15,13 +15,16 @@ import { AuthService } from '../service/auth.service';
 import { RolesGuard } from '../guards/roles.guard';
 import { Role } from '@prisma/client';
 import { Roles } from '../decorators/roles.decorator';
+import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
 
 @Controller('auth')
-export class AuthController {
+export class AuthController extends AbstractController {
   constructor(
     private readonly authService: AuthService,
     private readonly userService: UserService,
-  ) {}
+  ) {
+    super();
+  }
 
   @Post('login')
   async login(@Body() loginDto: LoginDto) {

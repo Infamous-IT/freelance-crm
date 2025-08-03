@@ -8,30 +8,29 @@ import {
   Delete,
   UseGuards,
   Query,
-  Req,
+  UseInterceptors
 } from '@nestjs/common';
 import { CustomerService } from '../service/customer.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import logger from 'src/common/logger/logger';
 import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { Role } from '@prisma/client';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
-import { Customer } from '@prisma/client';
-import {
-  CustomerSpending,
-  CustomerStats,
-  PaginatedResult,
-  TopCustomerByOrders,
-} from 'src/modules/customer/interfaces/customer.interface';
-import { GetTopCustomersBySpending } from '../types/customer-prisma-types.interface';
+import { PaginatedResult } from 'src/modules/customer/interfaces/customer.interface';
+import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
+import { GetCustomersDto } from '../dto/get-customers.dto';
+import { PaginatedTransformInterceptor } from 'src/app/interceptors/paginated-transform.interceptor';
+import { Customer } from '../entities/customer.entity';
 
 @ApiTags('Customers')
 @Controller('customers')
-export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+export class CustomerController extends AbstractController {
+  constructor(private readonly customerService: CustomerService) {
+    super();
+  }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
@@ -63,17 +62,19 @@ export class CustomerController {
     return this.customerService.addOrdersToCustomer(customerId, body.orderIds);
   }
 
+  @Get()
+  @UseInterceptors( new PaginatedTransformInterceptor( Customer ) )
   @ApiOperation({ summary: 'Отримати список всіх замовників' })
-  @ApiResponse({
-    status: 200,
-    description: 'Список замовників успішно отримано',
-  })
+  @ApiResponse({ status: 200, description: 'Список замовників успішно отримано' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  @Get()
-  findAll(): Promise<PaginatedResult<Customer>> {
-    logger.info('Received request to find all customers');
-    return this.customerService.findAll();
+  async getAllPaginated(
+    @Query() getCustomersDto: GetCustomersDto,
+    @Query('page') page: number = 1,
+    @Query('perPage') perPage: number = 20,
+  ): Promise<PaginatedResult<Customer>> {
+    logger.info(`Fetching customers with filters: ${JSON.stringify(getCustomersDto)}`);
+    return this.customerService.findAll(getCustomersDto, page, perPage);
   }
 
   @Get(':id')
@@ -113,86 +114,5 @@ export class CustomerController {
   remove(@Param('id') id: string): Promise<string> {
     logger.info(`Received request to delete customer with ID: ${id}`);
     return this.customerService.remove(id);
-  }
-
-  @Get('stats/customer-spending')
-  @ApiOperation({ summary: 'Отримати витрати клієнтів' })
-  @ApiResponse({
-    status: 200,
-    description: 'Успішно отримано витрати клієнтів',
-  })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getCustomerSpending(@Req() req: any): Promise<CustomerSpending[]> {
-    logger.info('Received request to get customer spending');
-    return this.customerService.getCustomerSpending(
-      req.user.id,
-      req.user.role === 'ADMIN',
-    );
-  }
-
-  @Get('stats/top-spenders')
-  @ApiOperation({ summary: 'Отримати топ клієнтів за витратами' })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Кількість клієнтів',
-    example: 5,
-  })
-  @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getTopCustomersBySpending(
-    @Req() req: any,
-    @Query('limit') limit: number,
-  ): Promise<GetTopCustomersBySpending[]> {
-    const isAdmin = req.user.role === 'ADMIN';
-    const customersLimit = Number(limit) || 5;
-    logger.info('Received request to get top customers by spending');
-    return this.customerService.getTopCustomersBySpending(
-      req.user.id,
-      isAdmin,
-      customersLimit,
-    );
-  }
-
-  @Get('stats/top-customers/orders')
-  @ApiOperation({ summary: 'Отримати топ клієнтів за кількістю замовлень' })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Кількість клієнтів',
-    example: 5,
-  })
-  @ApiResponse({ status: 200, description: 'Успішно отримано топ клієнтів' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getTopCustomersByOrders(
-    @Req() req: any,
-    @Query('limit') limit: number,
-  ): Promise<TopCustomerByOrders[]> {
-    const userId: string = req.user.id;
-    const isAdmin: boolean = req.user.role === 'ADMIN';
-    logger.info('Received request to get top customers by orders');
-    return this.customerService.getTopCustomersByOrders(
-      userId,
-      isAdmin,
-      Number(limit) || 5,
-    );
-  }
-
-  @Get('stats/customers')
-  @ApiOperation({
-    summary: 'Отримати статистику клієнтів для поточного користувача',
-  })
-  @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getUserCustomerStats(@Req() req: any): Promise<CustomerStats> {
-    logger.info('Received request to get user customer stats');
-    return this.customerService.getUserCustomerStats(
-      req.user.id,
-      req.user.role === 'admin',
-    );
   }
 }

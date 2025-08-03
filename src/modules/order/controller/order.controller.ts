@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { OrderService } from '../service/order.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
@@ -20,16 +21,17 @@ import logger from 'src/common/logger/logger';
 import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import {
-  OrderStats,
-  PaginatedOrders,
-  TopExpensiveOrder,
-} from 'src/modules/order/interfaces/order.interface';
+import { PaginatedOrders } from 'src/modules/order/interfaces/order.interface';
+import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
+import { GetOrdersDto } from '../dto/get-orders.dto';
+import { PaginatedTransformInterceptor } from 'src/app/interceptors/paginated-transform.interceptor';
 
 @ApiTags('Orders')
 @Controller('order')
-export class OrderController {
-  constructor(private readonly orderService: OrderService) {}
+export class OrderController extends AbstractController {
+  constructor(private readonly orderService: OrderService) {
+    super();
+  }
 
   @Post()
   @ApiOperation({ summary: 'Створити нове замовлення' })
@@ -46,23 +48,18 @@ export class OrderController {
   }
 
   @Get()
+  @UseInterceptors( new PaginatedTransformInterceptor( Order ) )
   @ApiOperation({ summary: 'Отримати список всіх замовлень' })
-  @ApiResponse({
-    status: 200,
-    description: 'Замовлення успішно знайдені',
-    type: Order,
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: 'Номер сторінки',
-    example: 1,
-  })
+  @ApiResponse({ status: 200, description: 'Замовлення успішно знайдені' })
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  findAll(@Query('page') page: number): Promise<PaginatedOrders> {
-    logger.info(`Received request to get orders on page ${page}`);
-    return this.orderService.findAll(Number(page) || 1);
+  async getAllPaginated(
+    @Query() getOrdersDto: GetOrdersDto,
+    @Query('page') page: number = 1,
+    @Query('perPage') perPage: number = 20,
+  ): Promise<PaginatedOrders> {
+    logger.info(`Fetching orders with filters: ${JSON.stringify(getOrdersDto)}`);
+    return this.orderService.findAll(getOrdersDto, page, perPage);
   }
 
   @Get(':id')
@@ -117,50 +114,5 @@ export class OrderController {
       `User with ID: ${userId} is attempting to delete order with ID: ${id}`,
     );
     return this.orderService.remove(id, userId);
-  }
-
-  @Get('stats/user')
-  @ApiOperation({
-    summary: 'Отримати статистику замовлень для поточного користувача',
-  })
-  @ApiResponse({ status: 200, description: 'Успішно отримано статистику' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getUserOrderStats(@Req() req: any): Promise<OrderStats> {
-    logger.info(`Fetching order statistics for user with ID: ${req.user.id}`);
-    return this.orderService.getUserOrderStats(
-      req.user.id,
-      req.user.id,
-      req.user.role === 'ADMIN',
-    );
-  }
-
-  @Get('stats/top-expensive')
-  @ApiOperation({ summary: 'Отримати найдорожчі замовлення' })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Кількість найдорожчих замовлень',
-    example: 5,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Успішно отримано найдорожчі замовлення',
-  })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  getTopExpensiveOrders(
-    @Req() req: any,
-    @Query('limit') limit: number,
-  ): Promise<TopExpensiveOrder[]> {
-    const isAdmin = req.user.role === 'ADMIN';
-    logger.info(
-      `Fetching top ${limit} expensive orders for user with ID: ${req.user.id}`,
-    );
-    return this.orderService.getTopExpensiveOrders(
-      req.user.id,
-      isAdmin,
-      Number(limit) || 5,
-    );
   }
 }
