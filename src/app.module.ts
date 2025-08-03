@@ -1,16 +1,16 @@
 import { forwardRef, MiddlewareConsumer, Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
-import { UserModule } from './user/user.module';
-import { OrderModule } from './order/order.module';
-import { CustomerModule } from './customer/customer.module';
-import { AuthModule } from './auth/auth.module';
-import { RedisModule } from './redis/redis.module';
+import { PrismaModule } from './common/prisma/prisma.module';
+import { UserModule } from './modules/user/user.module';
+import { OrderModule } from './modules/order/order.module';
+import { CustomerModule } from './modules/customer/customer.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { RedisModule } from './common/redis/redis.module';
 import { WinstonModule } from 'nest-winston';
-import logger from './logger/logger';
+import logger from './common/logger/logger';
 import { NestModule } from '@nestjs/common';
-import { LoggerMiddleware } from './logger/LoggerMiddleware';
+import { LoggerMiddleware } from './common/logger/LoggerMiddleware';
 
 @Module({
   imports: [
