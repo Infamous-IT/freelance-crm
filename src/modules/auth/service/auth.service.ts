@@ -11,9 +11,9 @@ import { User } from 'src/modules/user/entities/user.entity';
 import { UserService } from 'src/modules/user/service/user.service';
 import { RegisterDto } from '../dto/register.dto';
 import { EmailService } from './email.service';
-import { PrismaService } from 'src/common/prisma/prisma.service';
 import { RedisClientType } from 'redis';
 import logger from 'src/common/logger/logger';
+import { DatabaseService } from 'src/database/service/database.service';
 
 @Injectable()
 export class AuthService {
@@ -21,7 +21,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
-    private readonly prisma: PrismaService,
+    private readonly databaseService: DatabaseService,
     @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
   ) {}
 
@@ -161,7 +161,7 @@ export class AuthService {
     }
 
     this.forgotPasswordCodes.delete(email);
-    const updatedUser = await this.prisma.user.update({
+    const updatedUser = await this.databaseService.user.update({
       where: { email },
       data: { isEmailVerified: true },
     });
@@ -219,7 +219,7 @@ export class AuthService {
     oldPassword: string,
     newPassword: string,
   ) {
-    const user = await this.userService.findOne(userId);
+    const user = await this.userService.findOneOrThrow(userId);
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {

@@ -1,6 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, OmitType } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Exclude, Expose } from 'class-transformer';
+import { UserSecureData } from '../interfaces/user.interface';
 
 export class User {
   @ApiProperty({
@@ -75,3 +76,5 @@ export class User {
   @Expose()
   role: Role;
 }
+
+export class UserSecure extends OmitType ( User, ['password'] ) implements UserSecureData {}

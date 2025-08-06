@@ -1,6 +1,5 @@
 import { Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { RedisClientType } from 'redis';
-import { PrismaService } from 'src/common/prisma/prisma.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import logger from 'src/common/logger/logger';
@@ -15,12 +14,13 @@ import {
 import { CustomerRepository } from '../repository/customer.repository';
 import { paginate } from 'src/common/pagination/paginator';
 import { GetCustomersDto } from '../dto/get-customers.dto';
+import { DatabaseService } from 'src/database/service/database.service';
 
 @Injectable()
 export class CustomerService {
   constructor(
     private readonly customerRepository: CustomerRepository,
-    private readonly prisma: PrismaService,
+    private readonly databaseService: DatabaseService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
@@ -51,7 +51,7 @@ export class CustomerService {
     logger.info(
       `Received request to add orders to customer with ID: ${customerId}`,
     );
-    const existingOrders = await this.prisma.order.findMany({
+    const existingOrders = await this.databaseService.order.findMany({
       where: {
         id: { in: orderIds },
         customers: { some: {} },

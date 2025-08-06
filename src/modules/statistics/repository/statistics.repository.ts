@@ -31,7 +31,7 @@ export class StatisticsRepository {
 
     return {
       totalOrders: stats._count.id,
-      totalEarnings: stats._sum.price?.toNumber() ?? 0,
+      totalEarnings: stats._sum.price ?? 0,
     };
   }
 
@@ -71,7 +71,7 @@ export class StatisticsRepository {
       id: customer.id,
       fullName: customer.fullName,
       totalSpending: customer.order.reduce(
-        (sum, order) => sum + order.price.toNumber(),
+        (sum, order) => sum + order.price,
         0,
       ),
     }));

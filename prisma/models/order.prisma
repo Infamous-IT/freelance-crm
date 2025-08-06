@@ -1,0 +1,32 @@
+model Order {
+    id          String      @id @default(uuid())
+    title       String
+    description String
+    price       Int         @default(0)
+    startDate   DateTime
+    endDate     DateTime
+    category    Category
+    status      OrderStatus @default(NEW)
+    userId      String
+    user        User        @relation(fields: [userId], references: [id])
+    customers   Customer[]
+}
+
+enum Category {
+    FRONTEND
+    BACKEND
+    FULLSTACK
+    DATABASE
+    SMM
+    ADS
+    TRANSLATION
+    DESIGN
+}
+
+enum OrderStatus {
+    NEW
+    INPROGRESS
+    REJECTED
+    DONE
+    DONE_BUT_NOT_PAY
+}

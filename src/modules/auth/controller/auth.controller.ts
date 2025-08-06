@@ -64,7 +64,7 @@ export class AuthController extends AbstractController {
       logger.warn(`Invalid refresh token: ${refreshDto.refreshToken}`);
       throw new UnauthorizedException('Не дійсний Refresh Token');
     }
-    const user = await this.userService.findOne(payload.sub);
+    const user = await this.userService.findOneOrThrow(payload.sub);
     logger.info(`Tokens refreshed successfully for user: ${user.email}`);
     return this.authService.generateTokens(user);
   }

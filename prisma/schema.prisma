@@ -1,71 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-model User {
-  id              String   @id @default(uuid())
-  firstName       String
-  lastName        String
-  country         String?
-  email           String   @unique
-  password        String
-  isEmailVerified Boolean? @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now())
-  role            Role     @default(FREELANCER)
-  orders          Order[]
-}
-
-model Order {
-  id          String      @id @default(uuid())
-  title       String
-  description String
-  price       Decimal     @default(0)
-  startDate   DateTime
-  endDate     DateTime
-  category    Category
-  status      OrderStatus @default(NEW)
-  userId      String
-  user        User        @relation(fields: [userId], references: [id])
-  // customer         Customer?
-  customers   Customer[]
-}
-
-model Customer {
-  id       String  @id @default(uuid())
-  fullName String
-  email    String?
-  telegram String?
-  company  String?
-  // orderId          String       @unique
-  order    Order[] //@relation(fields: [orderId], references: [id])
-}
-
-enum Role {
-  MANAGER
-  ADMIN
-  FREELANCER
-}
-
-enum Category {
-  FRONTEND
-  BACKEND
-  FULLSTACK
-  DATABASE
-  SMM
-  ADS
-  TRANSLATION
-  DESIGN
-}
-
-enum OrderStatus {
-  NEW
-  INPROGRESS
-  REJECTED
-  DONE
 }

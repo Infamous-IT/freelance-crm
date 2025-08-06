@@ -1,93 +1,62 @@
 import { OrderRepository } from './../repository/order.repository';
-import { ForbiddenException, Inject, Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { RedisClientType } from 'redis';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import logger from 'src/common/logger/logger';
-import { Order, Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PaginatedOrders } from 'src/modules/order/interfaces/order.interface';
 import {
   OrderWithRelationIncludes,
   orderWithRelationIncludes
 } from '../types/order-prisma-types.interface';
-import { PrismaService } from 'src/common/prisma/prisma.service';
 import { paginate } from 'src/common/pagination/paginator';
-import { GetOrdersDto } from '../dto/get-orders.dto';
+import { OrderQueryDto } from '../dto/order-query.dto';
+import { OrderQuerySearchParamsDto } from '../dto/order-query-search-params.dto';
+import { OrderResponse } from '../responses/order.response';
 
 @Injectable()
 export class OrderService {
   constructor(
     private readonly orderRepository: OrderRepository,
-    private readonly prisma: PrismaService,
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
-  async create(createOrderDto: CreateOrderDto): Promise<Order> {
-    const { startDate, endDate, ...otherFields } = createOrderDto;
+  async create(createOrderDto: CreateOrderDto, userId: string): Promise<OrderResponse> {
+    try {
+      const { startDate, endDate, ...otherFields } = createOrderDto;
+      const formattedStartDate = this.convertDateToISO(startDate);
+      const formattedEndDate = this.convertDateToISO(endDate);
 
-    const formattedStartDate = this.convertDateToISO(startDate);
-    const formattedEndDate = this.convertDateToISO(endDate);
+      logger.info(
+        `Creating new order with startDate: ${formattedStartDate} and endDate: ${formattedEndDate}`,
+      );
 
-    logger.info(
-      `Creating new order with startDate: ${formattedStartDate} and endDate: ${formattedEndDate}`,
-    );
+      const order = await this.orderRepository.create({
+        data: {
+          ...otherFields,
+          userId,
+          startDate: formattedStartDate,
+          endDate: formattedEndDate,
+        },
+      });
 
-    const order = await this.orderRepository.create({
-      data: {
-        ...otherFields,
-        startDate: formattedStartDate,
-        endDate: formattedEndDate,
-      },
-    });
-
-    await this.clearCache();
-    logger.info(`Order created successfully with ID: ${order.id}`);
-    return order;
+      await this.clearCache();
+      logger.info(`Order created successfully with ID: ${order.id}`);
+      return order;
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to create order' );
+    }
   }
 
-  // TODO: used Prisma.validator
-  // async findAll(page: number = 1): Promise<PaginatedOrders> {
-  //   const take = 20;
-  //   page = parseInt(String(page), 10);
-  //   const skip = (page - 1) * take;
-
-  //   const cacheKey = `orders:page=${page}:size=${take}`;
-  //   const cachedData = await this.redis.get(cacheKey);
-
-  //   if (cachedData) {
-  //     logger.info(`Cache hit for orders on page ${page}`);
-  //     return JSON.parse(cachedData);
-  //   }
-
-  //   logger.info(`Cache miss. Fetching orders from DB for page ${page}`);
-
-  //   const [orders, totalCount] = await this.prisma.$transaction([
-  //     this.prisma.order.findMany({
-  //       skip,
-  //       take,
-  //       ...orderWithRelationIncludes,
-  //     }),
-  //     this.prisma.order.count(),
-  //   ]);
-
-  //   const result = {
-  //     data: orders,
-  //     totalCount,
-  //     totalPages: Math.ceil(totalCount / take),
-  //     currentPage: page,
-  //   };
-
-  //   await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-
-  //   logger.info(`Fetched orders for page ${page}, totalCount: ${totalCount}`);
-  //   return result;
-  // }
   async findAll(
-    param: GetOrdersDto,
+    param: OrderQuerySearchParamsDto,
     page: number,
-    perPage: number
+    perPage: number,
+    orderQueryDto: OrderQueryDto
   ): Promise<PaginatedOrders> {
-    const { searchText, orderBy, category, status, userId } = param;
+    const { searchText, category, status, orderBy } = param;
+    const { userId, userRole } = orderQueryDto;
   
     const terms = searchText ?
       searchText
@@ -118,7 +87,7 @@ export class OrderService {
             }),
             ...(category && { category }),
             ...(status && { status }),
-            ...(userId && { userId })
+            ...(userRole !== Role.ADMIN && { userId })
           },
           ...(orderBy ? {
             orderBy: {
@@ -137,7 +106,7 @@ export class OrderService {
       );
   
       return {
-        data: orders.data as Order[],
+        data: orders.data as OrderResponse[],
         totalCount: orders.meta.total,
         totalPages: orders.meta.lastPage,
         currentPage: orders.meta.currentPage,
@@ -147,21 +116,33 @@ export class OrderService {
     }
   }
 
-  async findOne(id: string): Promise<OrderWithRelationIncludes | null> {
+  async findOne(id: string, userId: string, userRole: Role): Promise<OrderWithRelationIncludes> {
     logger.info(`Fetching order with ID: ${id}`);
     const order = await this.orderRepository.findUnique({
       where: { id },
       ...orderWithRelationIncludes,
     });
+  
+    if (!order) {
+      logger.warn(`Order with ID ${id} not found`);
+      throw new NotFoundException(`Замовлення з ID ${id} не знайдено`);
+    }
+  
+    if (userRole !== Role.ADMIN && order.userId !== userId) {
+      logger.warn(`User ${userId} tried to access order ${id} owned by user ${order.userId}`);
+      throw new ForbiddenException('Ви не маєте доступу до цього замовлення');
+    }
+  
     logger.info(`Order fetched with ID: ${id}`);
     return order;
   }
 
   async update(
     id: string,
-    userId: string,
     updateOrderDto: UpdateOrderDto,
-  ): Promise<Order> {
+    userRole: Role,
+    currentUserId: string
+  ): Promise<OrderResponse> {
     const order = await this.orderRepository.findUnique({
       where: { id },
     });
@@ -173,9 +154,9 @@ export class OrderService {
       );
     }
 
-    if (order.userId !== userId) {
+    if (userRole !== Role.ADMIN && order.userId !== currentUserId) {
       logger.error(
-        `User with ID: ${userId} tried to update another user's order with ID: ${id}`,
+        `User with ID: ${currentUserId} tried to update another user's order with ID: ${id}`,
       );
       throw new ForbiddenException(
         'Ви не можете редагувати це замовлення, тому що ви не створювали його!',
@@ -206,7 +187,7 @@ export class OrderService {
     return updatedOrder;
   }
 
-  async remove(id: string, userId: string): Promise<Order> {
+  async remove(id: string, userId: string, userRole: Role): Promise<OrderResponse> {
     const order = await this.orderRepository.findUnique({
       where: { id },
     });
@@ -218,7 +199,7 @@ export class OrderService {
       );
     }
 
-    if (order.userId !== userId) {
+    if (userRole !== Role.ADMIN && order.userId !== userId) {
       logger.error(
         `User with ID: ${userId} tried to delete another user's order with ID: ${id}`,
       );

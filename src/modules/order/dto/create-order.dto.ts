@@ -1,12 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Category, OrderStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import { Transform } from 'class-transformer';
 import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Length,
+  Min,
 } from 'class-validator';
 
 export class CreateOrderDto {
@@ -35,7 +37,9 @@ export class CreateOrderDto {
   })
   @IsNotEmpty()
   @IsNumber()
-  price: Decimal;
+  @Min(0)
+  @Transform(({ value }) => Number(value))
+  price: number;
 
   @ApiProperty({
     example: '26.01.2025',
@@ -66,15 +70,6 @@ export class CreateOrderDto {
   @IsString()
   @IsNotEmpty()
   status: OrderStatus;
-
-  @ApiProperty({
-    example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
-    description:
-      'Унікальний ідентифікатор користувача, хто виконує замовлення (UUID)',
-  })
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
 
   @ApiProperty({
     example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',

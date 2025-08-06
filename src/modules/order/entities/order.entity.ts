@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Category, OrderStatus } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
 
 export class Order {
   @ApiProperty({
@@ -26,7 +25,7 @@ export class Order {
     example: 5000,
     description: 'Вартість проєкту',
   })
-  price: Decimal;
+  price: number;
 
   @ApiProperty({
     example: '26.01.2025',

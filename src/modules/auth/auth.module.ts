@@ -1,7 +1,6 @@
 import { RedisModule } from '@nestjs-modules/ioredis';
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { PrismaService } from 'src/common/prisma/prisma.service';
 import { UserModule } from 'src/modules/user/user.module';
 import { AuthController } from './controller/auth.controller';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -28,10 +27,14 @@ import { LocalStrategy } from './strategies/local.strategy';
     JwtAuthGuard,
     LocalAuthGuard,
     EmailService,
-    PrismaService,
-    RolesGuard,
+    RolesGuard
   ],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [
+    AuthService, 
+    EmailService, 
+    RolesGuard, 
+    JwtModule
+  ],
 })
 export class AuthModule {}

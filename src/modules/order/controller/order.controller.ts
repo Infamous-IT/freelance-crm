@@ -7,24 +7,26 @@ import {
   Param,
   Delete,
   Query,
-  Req,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { OrderService } from '../service/order.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderDto } from '../dto/update-order.dto';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Order } from '../entities/order.entity';
-import { AuthGuard } from '@nestjs/passport';
-import logger from 'src/common/logger/logger';
-import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { PaginatedOrders } from 'src/modules/order/interfaces/order.interface';
 import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
-import { GetOrdersDto } from '../dto/get-orders.dto';
 import { PaginatedTransformInterceptor } from 'src/app/interceptors/paginated-transform.interceptor';
+import { CurrentUser } from 'src/app/decorators/current-user.decorator';
+import { UserSecure } from 'src/modules/user/entities/user.entity';
+import { OrderQueryDto } from '../dto/order-query.dto';
+import { OrderQuerySearchParamsDto } from '../dto/order-query-search-params.dto';
+import { pagination } from 'src/common/pagination/pagination';
+import { OrderResponse } from '../responses/order.response';
+import { TransformInterceptor } from 'src/app/interceptors/transform.interceptor';
+import { OrderIdParamDto } from 'src/common/dtos/order-id-param.dto';
+import { AuthRolesGuard } from 'src/common/guards/user-auth.guard';
 
 @ApiTags('Orders')
 @Controller('order')
@@ -38,28 +40,38 @@ export class OrderController extends AbstractController {
   @ApiResponse({
     status: 201,
     description: 'Замовлення успішно створене',
-    type: Order,
+    type: OrderResponse,
   })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseInterceptors(TransformInterceptor)
+  @UseGuards(AuthRolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  create(@Body() createOrderDto: CreateOrderDto): Promise<Order> {
-    logger.info('Received request to create a new order');
-    return this.orderService.create(createOrderDto);
+  async create(
+    @Body() createOrderDto: CreateOrderDto,
+    @CurrentUser() currentUser: UserSecure
+  ) {
+    const response = await this.orderService.create(createOrderDto, currentUser.id);
+    return this.transformToObject(response, OrderResponse);
   }
 
   @Get()
-  @UseInterceptors( new PaginatedTransformInterceptor( Order ) )
+  @UseInterceptors( new PaginatedTransformInterceptor( OrderResponse ) )
   @ApiOperation({ summary: 'Отримати список всіх замовлень' })
   @ApiResponse({ status: 200, description: 'Замовлення успішно знайдені' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthRolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
   async getAllPaginated(
-    @Query() getOrdersDto: GetOrdersDto,
-    @Query('page') page: number = 1,
-    @Query('perPage') perPage: number = 20,
-  ): Promise<PaginatedOrders> {
-    logger.info(`Fetching orders with filters: ${JSON.stringify(getOrdersDto)}`);
-    return this.orderService.findAll(getOrdersDto, page, perPage);
+    @Query() param: OrderQuerySearchParamsDto,
+    @CurrentUser() currentUser: UserSecure
+  ) {
+    const { page, perPage } = pagination(param.page, param.perPage);
+    
+    const orderQueryDto: OrderQueryDto = {
+      userId: currentUser.id,
+      userRole: currentUser.role
+    };
+
+    const response = await this.orderService.findAll(param, page, perPage, orderQueryDto);
+    return this.transformToArray(response.data, OrderResponse);
   }
 
   @Get(':id')
@@ -67,13 +79,17 @@ export class OrderController extends AbstractController {
   @ApiResponse({
     status: 200,
     description: 'Замовлення успішно знайдено',
-    type: Order,
+    type: OrderResponse,
   })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseInterceptors(TransformInterceptor)
+  @UseGuards(AuthRolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  findOne(@Param('id') id: string): Promise<Order | null> {
-    logger.info(`Received request to get order with ID: ${id}`);
-    return this.orderService.findOne(id);
+  async findOne(
+    @Param() param: OrderIdParamDto,
+    @CurrentUser() currentUser: UserSecure
+  ) {
+    const response = await this.orderService.findOne(param.orderId, currentUser.id, currentUser.role);
+    return this.transformToObject(response, OrderResponse);
   }
 
   @Patch(':id')
@@ -81,21 +97,19 @@ export class OrderController extends AbstractController {
   @ApiResponse({
     status: 200,
     description: 'Замовленя успішно оновлене',
-    type: Order,
+    type: OrderResponse,
   })
   @ApiResponse({ status: 403, description: 'Доступ заборонено' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseInterceptors(TransformInterceptor)
+  @UseGuards(AuthRolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  update(
-    @Param('id') id: string,
+  async update(
+    @Param() param: OrderIdParamDto,
     @Body() updateOrderDto: UpdateOrderDto,
-    @Req() req: any,
-  ): Promise<Order> {
-    const userId = req.user.id;
-    logger.info(
-      `User with ID: ${userId} is attempting to update order with ID: ${id}`,
-    );
-    return this.orderService.update(id, userId, updateOrderDto);
+    @CurrentUser() currentUser: UserSecure
+  ) {
+    const response = await this.orderService.update(param.orderId, updateOrderDto, currentUser.role, currentUser.id);
+    return this.transformToObject(response, OrderResponse);
   }
 
   @Delete(':id')
@@ -103,16 +117,17 @@ export class OrderController extends AbstractController {
   @ApiResponse({
     status: 200,
     description: 'Замовлення успішно видалене',
-    type: Order,
+    type: OrderResponse,
   })
   @ApiResponse({ status: 403, description: 'Доступ заборонено' })
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseInterceptors(TransformInterceptor)
+  @UseGuards(AuthRolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  remove(@Param('id') id: string, @Req() req: any): Promise<Order> {
-    const userId = req.user.id;
-    logger.info(
-      `User with ID: ${userId} is attempting to delete order with ID: ${id}`,
-    );
-    return this.orderService.remove(id, userId);
+  async remove(
+    @Param() param: OrderIdParamDto, 
+    @CurrentUser() currentUser: UserSecure
+  ) {
+    const response = await this.orderService.remove(param.orderId, currentUser.id, currentUser.role);
+    return this.transformToObject(response, OrderResponse);
   }
 }

@@ -19,8 +19,4 @@ export class GetOrdersDto {
   @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
-
-  @IsOptional()
-  @IsString()
-  userId?: string;
 }

@@ -1,4 +1,5 @@
 import { User } from '@prisma/client';
+import { OmitTyped } from 'src/app/interfaces/app.interface';
 
 export interface PaginatedUsers {
   data: User[];
@@ -6,3 +7,5 @@ export interface PaginatedUsers {
   totalPages: number;
   currentPage: number;
 }
+
+export type UserSecureData = OmitTyped<User, 'password'>;
