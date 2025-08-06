@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from 'src/database/service/database.service';
+import { CustomerSpendingResponse, DashboardStatsResponse, TopCustomerByOrdersResponse, TopCustomerBySpendingResponse, TopExpensiveOrderResponse, UserCustomerStatsResponse, UserOrderStatsResponse } from '../responses/statistics.response';
 
 @Injectable()
 export class StatisticsRepository {
@@ -19,10 +20,7 @@ export class StatisticsRepository {
     return uniqueCustomers.size;
   }
 
-  async getUserOrderStats(userId: string): Promise<{
-    totalOrders: number;
-    totalEarnings: number;
-  }> {
+  async getUserOrderStats(userId: string): Promise<UserOrderStatsResponse> {
     const stats = await this.databaseService.order.aggregate({
       where: { userId },
       _count: { id: true },
@@ -39,7 +37,7 @@ export class StatisticsRepository {
     userId: string,
     isAdmin: boolean,
     limit: number = 5,
-  ): Promise<any[]> {
+  ): Promise<TopExpensiveOrderResponse[]> {
     return this.databaseService.order.findMany({
       where: isAdmin ? {} : { userId },
       orderBy: { price: 'desc' },
@@ -55,7 +53,7 @@ export class StatisticsRepository {
   async getCustomerSpending(
     userId: string,
     isAdmin: boolean,
-  ): Promise<any[]> {
+  ): Promise<CustomerSpendingResponse[]> {
     const customers = await this.databaseService.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId } } },
       select: {
@@ -68,8 +66,8 @@ export class StatisticsRepository {
     });
 
     return customers.map((customer) => ({
-      id: customer.id,
-      fullName: customer.fullName,
+      customerId: customer.id,
+      customerName: customer.fullName,
       totalSpending: customer.order.reduce(
         (sum, order) => sum + order.price,
         0,
@@ -81,7 +79,7 @@ export class StatisticsRepository {
     userId: string,
     isAdmin: boolean,
     limit: number = 5,
-  ): Promise<any[]> {
+  ): Promise<TopCustomerBySpendingResponse[]> {
     const spendingData = await this.databaseService.order.findMany({
       where: isAdmin ? {} : { userId },
       select: {
@@ -116,9 +114,8 @@ export class StatisticsRepository {
     });
 
     return customers.map((customer) => ({
-      id: customer.id,
-      fullName: customer.fullName,
-      email: customer.email,
+      customerId: customer.id,
+      customerName: customer.fullName,
       totalSpending: customerSpendingMap.get(customer.id) || 0,
     }));
   }
@@ -127,32 +124,50 @@ export class StatisticsRepository {
     userId: string,
     isAdmin: boolean,
     limit: number = 5,
-  ): Promise<any[]> {
-    return this.databaseService.customer.findMany({
+  ): Promise<TopCustomerByOrdersResponse[]> {
+    const customers = await this.databaseService.customer.findMany({
       where: isAdmin ? {} : { order: { some: { userId } } },
-      orderBy: { order: { _count: 'desc' } },
-      take: limit,
       select: {
         id: true,
         fullName: true,
         _count: { select: { order: true } },
       },
     });
+
+    return customers.map((customer) => ({
+      customerId: customer.id,
+      customerName: customer.fullName,
+      totalOrders: customer._count.order,
+    }));
   }
 
-  async getDashboardStats(userId: string, isAdmin: boolean): Promise<any> {
-    const [userStats, orderStats, customerStats] = await Promise.all([
+  async getDashboardStats(userId: string, isAdmin: boolean): Promise<DashboardStatsResponse> {
+    const [userCustomerStats, userOrderStats, customerSpending] = await Promise.all([
       this.getUserCustomerStats(userId),
       this.getUserOrderStats(userId),
       this.getCustomerSpending(userId, isAdmin),
     ]);
 
+    const userStats: UserOrderStatsResponse = {
+      totalOrders: userOrderStats.totalOrders,
+      totalEarnings: userOrderStats.totalEarnings,
+    };
+
+    const customerStats: UserCustomerStatsResponse = {
+      totalCustomers: userCustomerStats,
+    };
+
+    const orderStats: UserOrderStatsResponse = {
+      totalOrders: userOrderStats.totalOrders,
+      totalEarnings: userOrderStats.totalEarnings,
+    };
+
     return {
       userStats,
       orderStats,
       customerStats,
-      totalCustomers: customerStats.length,
-      totalSpending: customerStats.reduce(
+      totalCustomers: customerSpending.length,
+      totalSpending: customerSpending.reduce(
         (sum, customer) => sum + customer.totalSpending,
         0,
       ),
