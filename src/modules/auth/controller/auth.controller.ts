@@ -3,19 +3,26 @@ import {
   Controller,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { UserService } from 'src/modules/user/service/user.service';
-import { LoginDto } from '../dto/login.dto';
-import { RegisterDto } from '../dto/register.dto';
+import { LoginDto } from '../dtos/login.dto';
+import { RegisterDto } from '../dtos/register.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import logger from 'src/common/logger/logger';
 import { AuthService } from '../service/auth.service';
 import { RolesGuard } from '../guards/roles.guard';
 import { Role } from '@prisma/client';
 import { Roles } from '../decorators/roles.decorator';
 import { AbstractController } from 'src/common/abstract/controller/abstract.controller';
+import { ChangePasswordResponse, ForgotPasswordResponse, LoginResponse, LogoutResponse, RefreshTokenResponse, RegisterResponse, SendVerificationCodeResponse, UpdatePasswordResponse, VerifyEmailResponse } from '../responses/auth.response';
+import { TransformInterceptor } from 'src/app/interceptors/transform.interceptor';
+import { ChangePasswordDto } from '../dtos/change-password.dto';
+import { UpdatePasswordDto } from '../dtos/update-password.dto';
+import { ForgotPasswordDto } from '../dtos/forgot-password.dto';
+import { SendVerificationCodeDto } from '../dtos/send-verification-code.dto';
+import { VerifyEmailDto } from '../dtos/verify-email.dto';
+import { RefreshTokenDto } from '../dtos/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController extends AbstractController {
@@ -27,118 +34,102 @@ export class AuthController extends AbstractController {
   }
 
   @Post('login')
+  @UseInterceptors(TransformInterceptor)
   async login(@Body() loginDto: LoginDto) {
-    try {
-      logger.info(`Login attempt for email: ${loginDto.email}`);
-      const result = await this.authService.login(
-        loginDto.email,
-        loginDto.password,
-      );
-      logger.info(`Login successful for email: ${loginDto.email}`);
-      return result;
-    } catch (error) {
-      logger.error(`Login failed for email: ${loginDto.email}`, { error });
-      throw new UnauthorizedException('Невірні облікові дані');
-    }
+    const result = await this.authService.login(
+      loginDto.email,
+      loginDto.password,
+    );
+    return this.transformToObject(result, LoginResponse);
   }
 
   @Post('register')
+  @UseInterceptors(TransformInterceptor)
   async register(@Body() registerDto: RegisterDto) {
-    logger.info(`Registration attempt for email: ${registerDto.email}`);
     const newUser = await this.authService.register(registerDto);
-    logger.info(
-      `User successfully registered with email: ${registerDto.email}`,
-    );
-    return { message: 'Користувача успішно зареєстровано', user: newUser };
+    const response = { message: 'Користувача успішно зареєстровано', user: newUser };
+    return this.transformToObject(response, RegisterResponse);
   }
 
   @Post('refresh')
-  async refresh(@Body() refreshDto: { refreshToken: string }) {
-    logger.info(
-      `Refreshing tokens for refreshToken: ${refreshDto.refreshToken}`,
-    );
+  @UseInterceptors(TransformInterceptor)
+  async refresh(@Body() refreshDto: RefreshTokenDto) {
     const payload = await this.authService.validateAccessToken(
       refreshDto.refreshToken,
     );
-    if (!payload) {
-      logger.warn(`Invalid refresh token: ${refreshDto.refreshToken}`);
-      throw new UnauthorizedException('Не дійсний Refresh Token');
-    }
     const user = await this.userService.findOneOrThrow(payload.sub);
-    logger.info(`Tokens refreshed successfully for user: ${user.email}`);
-    return this.authService.generateTokens(user);
-  }
-  @Post('logout')
-  @UseGuards(JwtAuthGuard)
-  async logout(@Req() req: any) {
-    const accessToken = req.headers.authorization?.split(' ')[1];
-    logger.info(`Logout request for accessToken: ${accessToken}`);
-    await this.authService.revokeAccessToken(accessToken);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    logger.info(
-      `User successfully logged out with accessToken: ${accessToken}`,
-    );
-    return { message: 'Ви успішно вийшли з системи.' };
+    const tokens = this.authService.generateTokens(user);
+    return this.transformToObject(tokens, RefreshTokenResponse);
   }
 
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(TransformInterceptor)
+  async logout(@Req() req: any) {
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    await this.authService.revokeAccessToken(accessToken);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const response = { message: 'Ви успішно вийшли з системи.' };
+    return this.transformToObject(response, LogoutResponse);
+  }
+
+  // TODO: use current user
   @Post('verify-email')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  async verifyEmail(@Body() body: { email: string; code: string }) {
-    logger.info(`Email verification attempt for email: ${body.email}`);
-    const result = await this.authService.verifyEmail(body.email, body.code);
-    if (result) {
-      logger.info(`Email verified successfully for ${body.email}`);
-    }
-    return result;
+  @UseInterceptors(TransformInterceptor)
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    const result = await this.authService.verifyEmail(verifyEmailDto.email, verifyEmailDto.code);
+    return this.transformToObject({ success: result }, VerifyEmailResponse);
   }
 
+  // TODO: use current user
   @Post('send-verification-code')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
-  async sendVerificationCode(@Body() body: { email: string }) {
-    logger.info(`Sending verification code to email: ${body.email}`);
-    await this.authService.sendVerificationCode(body.email);
-    logger.info(`Verification code sent to ${body.email}`);
-    return { message: 'Код успішно відправлено на електронну пошту' };
+  @UseInterceptors(TransformInterceptor)
+  async sendVerificationCode(@Body() sendVerificationCodeDto: SendVerificationCodeDto) {
+    await this.authService.sendVerificationCode(sendVerificationCodeDto.email);
+    const response = { message: 'Код успішно відправлено на електронну пошту' };
+    return this.transformToObject(response, SendVerificationCodeResponse);
   }
 
   @Post('forgot-password')
-  async sendForgotPassword(@Body() body: { email: string }) {
-    logger.info(`Forgot password request for email: ${body.email}`);
-    const result = await this.authService.sendForgotPassword(body.email);
-    logger.info(`Password reset code sent to email: ${body.email}`);
-    return result;
+  @UseInterceptors(TransformInterceptor)
+  async sendForgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    const result = await this.authService.sendForgotPassword(forgotPasswordDto.email);
+    return this.transformToObject(result, ForgotPasswordResponse);
   }
 
+  // TODO: use current user
   @Post('update-password')
+  @UseInterceptors(TransformInterceptor)
   async updateForgotPassword(
-    @Body() body: { email: string; code: string; newPassword: string },
+    @Body() updatePasswordDto: UpdatePasswordDto,
   ) {
-    logger.info(`Updating password for email: ${body.email}`);
     const result = await this.authService.updateForgotPassword(
-      body.email,
-      body.code,
-      body.newPassword,
+      updatePasswordDto.email,
+      updatePasswordDto.code,
+      updatePasswordDto.newPassword,
     );
-    logger.info(`Password successfully updated for email: ${body.email}`);
-    return result;
+    return this.transformToObject({ user: result }, UpdatePasswordResponse);
   }
 
+  // TODO: use current user
   @Post('change-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.FREELANCER)
+  @UseInterceptors(TransformInterceptor)
   async changePassword(
     @Req() req,
-    @Body() body: { oldPassword: string; newPassword: string },
+    @Body() changePasswordDto: ChangePasswordDto,
   ) {
-    logger.info(`Password change request for user: ${req.user.id}`);
     const result = await this.authService.changePassword(
       req.user.id,
-      body.oldPassword,
-      body.newPassword,
+      changePasswordDto.oldPassword,
+      changePasswordDto.newPassword,
     );
-    logger.info(`Password successfully changed for user: ${req.user.id}`);
-    return result;
+
+    return this.transformToObject({ user: result }, ChangePasswordResponse);
   }
 }

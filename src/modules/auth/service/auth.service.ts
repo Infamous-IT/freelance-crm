@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { User, UserSecure } from 'src/modules/user/entities/user.entity';
 import { UserService } from 'src/modules/user/service/user.service';
-import { RegisterDto } from '../dto/register.dto';
+import { RegisterDto } from '../dtos/register.dto';
 import { EmailService } from './email.service';
 import { RedisClientType } from 'redis';
 import logger from 'src/common/logger/logger';
@@ -28,25 +29,29 @@ export class AuthService {
   private forgotPasswordCodes = new Map<string, string>();
 
   generateTokens(user: User) {
-    const payload = { sub: user.id, email: user.email };
+    try {
+      const payload = { sub: user.id, email: user.email };
 
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: process.env.EXPIRATION_TIME_FOR_ACCESS_TOKEN,
-      secret: process.env.JWT_SECRET_TOKEN,
-    });
+      const accessToken = this.jwtService.sign(payload, {
+        expiresIn: process.env.EXPIRATION_TIME_FOR_ACCESS_TOKEN,
+        secret: process.env.JWT_SECRET_TOKEN,
+      });
 
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: process.env.EXPIRATION_TIME_FOR_REFRESH_TOKEN,
-      secret: process.env.JWT_REFRESH_TOKEN,
-    });
+      const refreshToken = this.jwtService.sign(payload, {
+        expiresIn: process.env.EXPIRATION_TIME_FOR_REFRESH_TOKEN,
+        secret: process.env.JWT_REFRESH_TOKEN,
+      });
 
-    logger.info(
-      `Generated access token and refresh token for user: ${user.email}`,
-    );
-    return {
-      accessToken,
-      refreshToken,
-    };
+      logger.info(
+        `Generated access token and refresh token for user: ${user.email}`,
+      );
+      return {
+        accessToken,
+        refreshToken,
+      };
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to generate access and refresh tokens' );
+    }
   }
 
   validateAccessToken(token: string) {
@@ -55,8 +60,7 @@ export class AuthService {
       return this.jwtService.verify(token, {
         secret: process.env.JWT_SECRET_TOKEN,
       });
-    } catch (error) {
-      logger.error('Error validating access token', { error });
+    } catch ( err: unknown ) {
       return null;
     }
   }
@@ -93,36 +97,44 @@ export class AuthService {
       throw new ConflictException('Користувач з таким email вже існує');
     }
 
-    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+    try {
+      const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    const newUser = await this.userService.create({
-      ...registerDto,
-      password: hashedPassword,
-    });
+      const newUser = await this.userService.create({
+        ...registerDto,
+        password: hashedPassword,
+      });
 
-    logger.info(`New user registered: ${newUser.email}`);
-    return newUser;
+      logger.info(`New user registered: ${newUser.email}`);
+      return newUser;
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to register user' );
+    }
   }
 
   async login(email: string, password: string): Promise<any> {
-    logger.info(`Login attempt for user: ${email}`);
-    const user = await this.validateUser(email, password);
-    const tokens = this.generateTokens(user);
+    try {
+      logger.info(`Login attempt for user: ${email}`);
+      const user = await this.validateUser(email, password);
+      const tokens = this.generateTokens(user);
 
-    return {
-      message: 'Авторизація пройшла успішно',
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-    };
+      return {
+        message: 'Авторизація пройшла успішно',
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      };
+    } catch ( err: unknown ) {
+      throw new ConflictException( 'Bad credentials' );
+    }
   }
 
   async revokeAccessToken(accessToken: string): Promise<void> {
     try {
       logger.info(`Revoking access token: ${accessToken}`);
       await this.redisClient.set(accessToken, 'revoked', { EX: 3600 });
-    } catch (err) {
+    } catch ( err: unknown ) {
       logger.error('Error revoking access token', { error: err });
-      throw err;
+      throw new UnprocessableEntityException( 'Error revoking access token' );
     }
   }
 
@@ -131,9 +143,9 @@ export class AuthService {
       logger.info(`Checking if access token is revoked: ${accessToken}`);
       const result = await this.redisClient.get(accessToken);
       return result === 'revoked';
-    } catch (err) {
+    } catch ( err: unknown ) {
       logger.error('Error checking token revocation', { error: err });
-      throw err;
+      throw new UnprocessableEntityException( 'Error checking token revocation' );
     }
   }
 
@@ -141,9 +153,9 @@ export class AuthService {
     try {
       logger.info(`Getting TTL for token: ${token}`);
       return await this.redisClient.ttl(token);
-    } catch (err) {
+    } catch ( err: unknown ) {
       logger.error('Error getting TTL for token', { error: err });
-      throw err;
+      throw new UnprocessableEntityException( 'Error getting TTL for token' );
     }
   }
 
@@ -152,35 +164,43 @@ export class AuthService {
 
     if (!storedCode) {
       logger.warn(`No verification code found for email ${email}`);
-      throw new NotFoundException('Код для підтвердження не знайдено');
+      throw new NotFoundException('Code for accepting was not found!');
     }
 
     if (storedCode !== code) {
       logger.warn(`Invalid verification code for email ${email}`);
-      throw new UnauthorizedException('Код не валідний!');
+      throw new ConflictException('Code is not valid!');
     }
 
     this.forgotPasswordCodes.delete(email);
-    const updatedUser = await this.databaseService.user.update({
-      where: { email },
-      data: { isEmailVerified: true },
-    });
-
-    logger.info(`Email verified for ${email}`);
-    return !!updatedUser;
+    try {
+      const updatedUser = await this.databaseService.user.update({
+        where: { email },
+        data: { isEmailVerified: true },
+      });
+  
+      logger.info(`Email verified for ${email}`);
+      return !!updatedUser;
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to verify email' );
+    }
   }
 
   async sendVerificationCode(email: string): Promise<void> {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    try {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    this.forgotPasswordCodes.set(email, code);
+      this.forgotPasswordCodes.set(email, code);
 
-    await this.emailService.sendEmail(
-      email,
-      'Код підтвердження',
-      `Ваш код підтвердження: ${code}`,
-    );
-    logger.info(`Verification code sent to ${email}`);
+      await this.emailService.sendEmail(
+        email,
+        'Verification code',
+        `Your verification code is: ${code}`,
+      );
+      logger.info(`Verification code sent to ${email}`);
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to send verificaiton code' );
+    }
   }
 
   async sendForgotPassword(email: string) {
@@ -188,19 +208,23 @@ export class AuthService {
 
     if (!user) {
       logger.warn(`User with email ${email} not found for password reset`);
-      throw new UnauthorizedException('Користувача не знайдено!');
+      throw new NotFoundException('User was not found!');
     }
 
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-    this.forgotPasswordCodes.set(email, code);
+    try {
+      const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+      this.forgotPasswordCodes.set(email, code);
 
-    await this.emailService.sendEmail(
-      email,
-      'Код для відновлення паролю',
-      `Ваш код: ${code}`,
-    );
-    logger.info(`Password reset code sent to ${email}`);
-    return { message: 'Код відправлено на вашу електронну адресу.' };
+      await this.emailService.sendEmail(
+        email,
+        'Code for restore password',
+        `Your verification code: ${code}`,
+      );
+      logger.info(`Password reset code sent to ${email}`);
+      return { message: 'Code was send to your email.' };
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to send forgot password' );
+    }
   }
 
   async updateForgotPassword(email: string, code: string, newPassword: string) {
@@ -210,23 +234,27 @@ export class AuthService {
     const user = await this.userService.findByEmail(email);
     
     if (!user) {
-      throw new NotFoundException('Користувача не знайдено');
+      throw new NotFoundException('User was not found');
     }
 
-    const currentUser: UserSecure = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      country: user.country,
-      isEmailVerified: user.isEmailVerified,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      role: user.role,
-    };
-
-    logger.info(`Password updated for ${email}`);
-    return this.userService.update(user.id, { password: hashedPassword }, currentUser);
+    try {
+      const currentUser: UserSecure = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        country: user.country,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        role: user.role,
+      };
+  
+      logger.info(`Password updated for ${email}`);
+      return this.userService.update(user.id, { password: hashedPassword }, currentUser);
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to update forgot password' );
+    }
   }
 
   async changePassword(
@@ -242,21 +270,25 @@ export class AuthService {
       throw new UnauthorizedException('Старий пароль неправильний');
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    const currentUser: UserSecure = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      country: user.country,
-      isEmailVerified: user.isEmailVerified,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      role: user.role,
-    };
-
-    logger.info(`Password changed for user ${userId}`);
-    return this.userService.update(userId, { password: hashedPassword }, currentUser);
+      const currentUser: UserSecure = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        country: user.country,
+        isEmailVerified: user.isEmailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        role: user.role,
+      };
+  
+      logger.info(`Password changed for user ${userId}`);
+      return this.userService.update(userId, { password: hashedPassword }, currentUser);
+    } catch ( err: unknown ) {
+      throw new UnprocessableEntityException( 'Failed to change password' );
+    }
   }
 }
