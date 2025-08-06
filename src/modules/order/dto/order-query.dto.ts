@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum } from 'class-validator';
 import { Role } from '@prisma/client';
+import { OrderQuery } from '../interfaces/order.interface';
 
-export class OrderQueryDto {
+export class OrderQueryDto implements OrderQuery {
   @ApiProperty({
     description: 'ID користувача',
     example: 'a3bb189e-8bf9-3888-9912-ace4e6543002'

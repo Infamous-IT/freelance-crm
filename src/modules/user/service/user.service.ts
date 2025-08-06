@@ -13,6 +13,7 @@ import { UserRepository } from '../repository/user.repository';
 import { paginate } from 'src/common/pagination/paginator';
 import { GetUsersDto } from '../dto/get-users.dto';
 import { UserResponse } from '../responses/user.response';
+import { UserSecure } from '../entities/user.entity';
 
 @Injectable()
 export class UserService {
@@ -36,7 +37,7 @@ export class UserService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       logger.error(`Error when we creating user: ${errorMessage}`);
-      throw new UnprocessableEntityException( 'Failed to creating user' );
+      throw new UnprocessableEntityException('Failed to creating user');
     }
   }
 
@@ -108,7 +109,7 @@ export class UserService {
         currentPage: users.meta.currentPage,
       };
     } catch (err: unknown) {
-      throw new UnprocessableEntityException( 'Failed to get list of users' );
+      throw new UnprocessableEntityException('Failed to get list of users');
     }
   }
 
@@ -149,47 +150,45 @@ export class UserService {
       });
 
       return userWithOrders;
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to get user with order info' );
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to get user with order info');
     }
   }
 
   async findByEmail(email: string): Promise<UserResponse | null> {
     try {
       return await this.userRepository.findUnique({ where: { email } });
-    } catch ( err: unknown ) {
-      throw new NotFoundException( 'Not found email' );
+    } catch (err: unknown) {
+      throw new NotFoundException('Not found email');
     }
-    
   }
 
   async update(
     id: string, 
     updateUserDto: UpdateUserDto,
-    currentUserId?: string, 
-    currentUserRole?: Role
+    currentUser: UserSecure
   ): Promise<UserResponse> {
-    const existingUser = await this.findOneOrThrow( id );
+    const existingUser = await this.findOneOrThrow(id);
 
-    if (currentUserId && currentUserRole && currentUserRole !== Role.ADMIN && currentUserId !== id) {
+    if (currentUser.role !== Role.ADMIN && currentUser.id !== id) {
       throw new ForbiddenException('Ви можете оновлювати тільки свій профіль');
     }
     
     try {
-        const user = await this.userRepository.update({
+      const user = await this.userRepository.update({
         where: { id: existingUser.id },
         data: updateUserDto,
       });
       await this.clearCache();
       logger.info(`User updated: ${user.id} - ${user.email}`);
       return user;
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to update user' );
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to update user');
     }
   }
 
   async remove(id: string): Promise<UserResponse> {
-    const existingUser = await this.findOneOrThrow( id );
+    const existingUser = await this.findOneOrThrow(id);
     try {
       const user = await this.userRepository.delete({
         where: { id: existingUser.id },
@@ -197,8 +196,8 @@ export class UserService {
       await this.clearCache();
       logger.info(`User removed: ${user.id} - ${user.email}`);
       return user;
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to remove user.' );
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to remove user.');
     }
   }
 }

@@ -6,8 +6,9 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
+import { CreateCustomer } from '../interfaces/customer.interface';
 
-export class CreateCustomerDto {
+export class CreateCustomerDto implements CreateCustomer {
   @ApiProperty({
     example: 'Nazar Замовник',
     description: 'Імʼя та прізвище замовника',

@@ -1,9 +1,9 @@
-import { Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { RedisClientType } from 'redis';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import logger from 'src/common/logger/logger';
-import { Customer, Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import {
   PaginatedResult,
 } from 'src/modules/customer/interfaces/customer.interface';
@@ -15,6 +15,8 @@ import { CustomerRepository } from '../repository/customer.repository';
 import { paginate } from 'src/common/pagination/paginator';
 import { GetCustomersDto } from '../dto/get-customers.dto';
 import { DatabaseService } from 'src/database/service/database.service';
+import { CustomerResponse } from '../responses/customer.response';
+import { UserSecure } from 'src/modules/user/entities/user.entity';
 
 @Injectable()
 export class CustomerService {
@@ -24,33 +26,59 @@ export class CustomerService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
-  async create(createCustomerDto: CreateCustomerDto): Promise<Customer> {
+  async create( createCustomerDto: CreateCustomerDto, currentUser: UserSecure ): Promise<CustomerResponse> {
     const { orderIds, ...customerData } = createCustomerDto;
-    logger.info('Received request to create a new customer');
 
-    const customer = await this.customerRepository.create({
-      data: {
-        ...customerData,
-        order: orderIds
-          ? {
-              connect: orderIds.map((orderId) => ({ id: orderId })),
-            }
-          : undefined,
-      },
-    });
-
-    await this.clearCache();
-    logger.info('New customer created successfully');
-    return customer;
+    try {
+      logger.info('Received request to create a new customer');
+      const customer = await this.customerRepository.create({
+        data: {
+          ...customerData,
+          order: orderIds
+            ? {
+                connect: orderIds.map((orderId) => ({ id: orderId })),
+              }
+            : undefined,
+        },
+      });
+  
+      await this.clearCache();
+      logger.info('New customer created successfully');
+      return customer;
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to create customer');
+    }
   }
 
   async addOrdersToCustomer(
     customerId: string,
     orderIds: string[],
-  ): Promise<Customer> {
-    logger.info(
-      `Received request to add orders to customer with ID: ${customerId}`,
-    );
+    currentUser: UserSecure
+  ): Promise<CustomerResponse> {
+    logger.info(`Received request to add orders to customer with ID: ${customerId}`);
+
+    const customer = await this.customerRepository.findUnique({
+      where: { id: customerId },
+      include: { order: true }
+    });
+
+    if (!customer) {
+      throw new NotFoundException(`Customer with id ${customerId} was not found.`);
+    }
+
+    if (currentUser.role !== Role.ADMIN) {
+      const userOrders = await this.databaseService.order.findMany({
+        where: {
+          id: { in: orderIds },
+          userId: currentUser.id
+        }
+      });
+
+      if (userOrders.length !== orderIds.length) {
+        throw new ForbiddenException('You can add only own orders!');
+      }
+    }
+
     const existingOrders = await this.databaseService.order.findMany({
       where: {
         id: { in: orderIds },
@@ -63,62 +91,30 @@ export class CustomerService {
       throw new Error(`Some orders are already assigned to a customer`);
     }
 
-    const updatedCustomer = await this.customerRepository.update({
-      where: { id: customerId },
-      data: {
-        order: {
-          connect: orderIds.map((orderId) => ({ id: orderId })),
+    try {
+      const updatedCustomer = await this.customerRepository.update({
+        where: { id: customerId },
+        data: {
+          order: {
+            connect: orderIds.map((orderId) => ({ id: orderId })),
+          },
         },
-      },
-    });
-
-    await this.clearCache();
-    logger.info(`Orders successfully added to customer with ID: ${customerId}`);
-    return updatedCustomer;
+      });
+  
+      await this.clearCache();
+      logger.info(`Orders successfully added to customer with ID: ${customerId}`);
+      return updatedCustomer;
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to adding order to customer');
+    }
   }
-
-  // TODO: use Prisma.validator
-  // async findAll(page: number = 1): Promise<PaginatedResult<Customer>> {
-  //   const take = 20;
-  //   page = parseInt(String(page), 10);
-  //   const skip = (page - 1) * take;
-  //   const cacheKey = `customers:page${page}:size=${take}`;
-
-  //   logger.info(`Fetching customers for page ${page}`);
-
-  //   const cachedData = await this.redis.get(cacheKey);
-  //   if (cachedData) {
-  //     logger.info('Cache hit for customers');
-  //     return JSON.parse(cachedData);
-  //   }
-
-  //   const [custmers, totalCount] = await this.prisma.$transaction([
-  //     this.prisma.customer.findMany({
-  //       skip,
-  //       take,
-  //       ...customerWithOrderIncludes,
-  //     }),
-  //     this.prisma.customer.count(),
-  //   ]);
-
-  //   const result = {
-  //     data: custmers,
-  //     totalCount,
-  //     totalPages: Math.ceil(totalCount / take),
-  //     currentPage: page,
-  //   };
-
-  //   await this.redis.set(cacheKey, JSON.stringify(result), { EX: 300 });
-
-  //   logger.info('Fetched and cached customers data');
-  //   return result;
-  // }
 
   async findAll(
     param: GetCustomersDto,
     page: number,
-    perPage: number
-  ): Promise<PaginatedResult<Customer>> {
+    perPage: number,
+    currentUser: UserSecure
+  ): Promise<PaginatedResult<CustomerResponse>> {
     const { searchText, orderBy, company } = param;
   
     const terms = searchText ?
@@ -157,6 +153,13 @@ export class CustomerService {
               company: {
                 contains: company, mode: 'insensitive'
               }
+            }),
+            ...(currentUser.role !== Role.ADMIN && {
+              order: {
+                some: {
+                  userId: currentUser.id
+                }
+              }
             })
           },
           ...(orderBy ? {
@@ -175,24 +178,33 @@ export class CustomerService {
       );
   
       return {
-        data: customers.data as Customer[],
+        data: customers.data as CustomerResponse[],
         totalCount: customers.meta.total,
         totalPages: customers.meta.lastPage,
         currentPage: customers.meta.currentPage,
       };
     } catch (err: unknown) {
-      throw new UnprocessableEntityException();
+      throw new UnprocessableEntityException('Failed to getting customer list');
     }
   }
 
-  async findOne(id: string): Promise<CustomerWithOrderIncludes | null> {
+  async findOne(id: string, currentUser: UserSecure): Promise<CustomerResponse> {
     const cacheKey = `customer:${id}`;
     logger.info(`Fetching customer with ID: ${id}`);
 
     const cachedData = await this.redis.get(cacheKey);
     if (cachedData) {
       logger.info('Cache hit for customer');
-      return JSON.parse(cachedData);
+      const customer = JSON.parse(cachedData);
+      
+      if (currentUser.role !== Role.ADMIN) {
+        const hasAccess = customer.order?.some((order: any) => order.userId === currentUser.id);
+        if (!hasAccess) {
+          throw new ForbiddenException('Ви не маєте доступу до цього замовника');
+        }
+      }
+      
+      return customer;
     }
 
     const customer = await this.customerRepository.findUnique({
@@ -203,6 +215,13 @@ export class CustomerService {
     if (!customer) {
       logger.error(`Customer with ID ${id} not found`);
       throw new NotFoundException(`Customer with id ${id} was not found.`);
+    }
+
+    if (currentUser.role !== Role.ADMIN) {
+      const hasAccess = customer.order?.some((order: any) => order.userId === currentUser.id);
+      if (!hasAccess) {
+        throw new ForbiddenException('Ви не маєте доступу до цього замовника');
+      }
     }
 
     await this.redis.set(
@@ -217,10 +236,12 @@ export class CustomerService {
   async update(
     id: string,
     updateCustomerDto: UpdateCustomerDto,
-  ): Promise<Customer> {
+    currentUser: UserSecure
+  ): Promise<CustomerResponse> {
     logger.info(`Received request to update customer with ID: ${id}`);
     const existingCustomer = await this.customerRepository.findUnique({
       where: { id },
+      include: { order: true }
     });
 
     if (!existingCustomer) {
@@ -228,35 +249,57 @@ export class CustomerService {
       throw new NotFoundException(`Customer with id ${id} was not found.`);
     }
 
-    const updatedCustomer = await this.customerRepository.update({
-      where: { id },
-      data: updateCustomerDto,
-    });
+    if (currentUser.role !== Role.ADMIN) {
+      const hasAccess = existingCustomer.order?.some((order: any) => order.userId === currentUser.id);
+      if (!hasAccess) {
+        throw new ForbiddenException('You can update information for only own customers');
+      }
+    }
 
-    await this.clearCache();
-    logger.info(`Customer with ID: ${id} updated successfully`);
-    return updatedCustomer;
+    try {
+      const updatedCustomer = await this.customerRepository.update({
+        where: { id },
+        data: updateCustomerDto,
+      });
+
+      await this.clearCache();
+      logger.info(`Customer with ID: ${id} updated successfully`);
+      return updatedCustomer;
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to update customer');
+    }
   }
 
-  async remove(id: string): Promise<string> {
+  async remove(id: string, currentUser: UserSecure): Promise<CustomerResponse> {
     logger.info(`Received request to delete customer with ID: ${id}`);
     const existingCustomer = await this.customerRepository.findUnique({
       where: { id },
+      include: { order: true }
     });
-
+  
     if (!existingCustomer) {
       logger.error(`Customer with ID ${id} not found`);
       throw new NotFoundException(`Customer with id ${id} was not found.`);
     }
-
-    await this.customerRepository.delete({
-      where: { id },
-    });
-
-    await this.clearCache();
-    logger.info(`Customer with ID: ${id} deleted successfully`);
-
-    return `Customer with id ${id} was delete.`;
+  
+    if (currentUser.role !== Role.ADMIN) {
+      const hasAccess = existingCustomer.order?.some((order: any) => order.userId === currentUser.id);
+      if (!hasAccess) {
+        throw new ForbiddenException('You can remove only own customers');
+      }
+    }
+  
+    try {
+      const deletedCustomer = await this.customerRepository.delete({
+        where: { id },
+      });
+  
+      await this.clearCache();
+      logger.info(`Customer with ID: ${id} deleted successfully`);
+      return deletedCustomer as CustomerResponse;
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to remove customer');
+    }
   }
 
   private async clearCache(): Promise<void> {

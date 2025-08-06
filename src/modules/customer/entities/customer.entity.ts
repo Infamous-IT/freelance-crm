@@ -18,19 +18,19 @@ export class Customer {
     example: 'test@gmail.com',
     description: 'Електронна адреса замовника',
   })
-  email: string | null;
+  email?: string | null;
 
   @ApiProperty({
     example: 't.me/test',
     description: 'Телеграм замовника',
   })
-  telegram: string | null; 
+  telegram?: string | null; 
 
   @ApiProperty({
     example: 'Test IT Solution',
     description: 'Компанія замовника',
   })
-  company: string | null;
+  company?: string | null;
 
   @ApiProperty({
     example: 'a3bb189e-8bf9-3888-9912-ace4e6543002',

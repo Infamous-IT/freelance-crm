@@ -1,10 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsOptional, IsEnum, IsString, ValidateNested } from 'class-validator';
 import { Category, OrderStatus } from '@prisma/client';
 import { PaginationDto } from 'src/common/pagination/dtos/pagination.dto';
+import { OrderOrderBy, OrderQuerySearchParams } from '../interfaces/order.interface';
 
-export class OrderOrderByDto {
+export class OrderOrderByDto implements OrderOrderBy {
   @IsString()
   field: string;
 
@@ -12,7 +12,7 @@ export class OrderOrderByDto {
   sorting: 'asc' | 'desc';
 }
 
-export class OrderQuerySearchParamsDto extends PaginationDto {
+export class OrderQuerySearchParamsDto extends PaginationDto implements OrderQuerySearchParams {
   @IsOptional()
   @IsString()
   searchText?: string;

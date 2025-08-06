@@ -27,3 +27,20 @@ export interface TopCustomerBySpending {
   email: string | null;
   totalSpending: number;
 }
+
+export interface CreateCustomer {
+  fullName: string;
+  email?: string;
+  telegram?: string;
+  company?: string;
+  orderIds?: string[];
+}
+
+export interface GetCustomer {
+  searchText?: string;
+  orderBy?: {
+    field: string;
+    sorting: 'asc' | 'desc';
+  };
+  company?: string;
+}

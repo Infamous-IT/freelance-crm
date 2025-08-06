@@ -49,12 +49,12 @@ export class OrderController extends AbstractController {
     @Body() createOrderDto: CreateOrderDto,
     @CurrentUser() currentUser: UserSecure
   ) {
-    const response = await this.orderService.create(createOrderDto, currentUser.id);
+    const response = await this.orderService.create(createOrderDto, currentUser);
     return this.transformToObject(response, OrderResponse);
   }
 
   @Get()
-  @UseInterceptors( new PaginatedTransformInterceptor( OrderResponse ) )
+  @UseInterceptors(new PaginatedTransformInterceptor(OrderResponse))
   @ApiOperation({ summary: 'Отримати список всіх замовлень' })
   @ApiResponse({ status: 200, description: 'Замовлення успішно знайдені' })
   @UseGuards(AuthRolesGuard)
@@ -64,13 +64,7 @@ export class OrderController extends AbstractController {
     @CurrentUser() currentUser: UserSecure
   ) {
     const { page, perPage } = pagination(param.page, param.perPage);
-    
-    const orderQueryDto: OrderQueryDto = {
-      userId: currentUser.id,
-      userRole: currentUser.role
-    };
-
-    const response = await this.orderService.findAll(param, page, perPage, orderQueryDto);
+    const response = await this.orderService.findAll(param, page, perPage, currentUser);
     return this.transformToArray(response.data, OrderResponse);
   }
 
@@ -88,7 +82,7 @@ export class OrderController extends AbstractController {
     @Param() param: OrderIdParamDto,
     @CurrentUser() currentUser: UserSecure
   ) {
-    const response = await this.orderService.findOne(param.orderId, currentUser.id, currentUser.role);
+    const response = await this.orderService.findOne(param.orderId, currentUser);
     return this.transformToObject(response, OrderResponse);
   }
 
@@ -108,7 +102,7 @@ export class OrderController extends AbstractController {
     @Body() updateOrderDto: UpdateOrderDto,
     @CurrentUser() currentUser: UserSecure
   ) {
-    const response = await this.orderService.update(param.orderId, updateOrderDto, currentUser.role, currentUser.id);
+    const response = await this.orderService.update(param.orderId, updateOrderDto, currentUser);
     return this.transformToObject(response, OrderResponse);
   }
 
@@ -127,7 +121,7 @@ export class OrderController extends AbstractController {
     @Param() param: OrderIdParamDto, 
     @CurrentUser() currentUser: UserSecure
   ) {
-    const response = await this.orderService.remove(param.orderId, currentUser.id, currentUser.role);
+    const response = await this.orderService.remove(param.orderId, currentUser);
     return this.transformToObject(response, OrderResponse);
   }
 }

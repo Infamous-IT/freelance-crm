@@ -1,6 +1,7 @@
 import { IsOptional, IsString } from 'class-validator';
+import { GetCustomer } from '../interfaces/customer.interface';
 
-export class GetCustomersDto {
+export class GetCustomersDto implements GetCustomer {
   @IsOptional()
   @IsString()
   searchText?: string;

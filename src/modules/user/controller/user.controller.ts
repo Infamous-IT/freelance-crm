@@ -47,7 +47,7 @@ export class UserController extends AbstractController {
   }
 
   @Get()
-  @UseInterceptors( new PaginatedTransformInterceptor( UserResponse ) )
+  @UseInterceptors(new PaginatedTransformInterceptor(UserResponse))
   @ApiOperation({ summary: 'Отримати список всіх користувачів' })
   @ApiResponse({ status: 200, description: 'Список користувачів' })
   @UseGuards(AuthRolesGuard)
@@ -87,12 +87,7 @@ export class UserController extends AbstractController {
     @Body() updateUserDto: UpdateUserDto,
     @CurrentUser() currentUser: UserSecure,
   ) {
-    const response = await this.userService.update(
-      param.userId, 
-      updateUserDto, 
-      currentUser.id, 
-      currentUser.role
-    );
+    const response = await this.userService.update(param.userId, updateUserDto, currentUser);
     return this.transformToObject(response, UserResponse);
   }
 

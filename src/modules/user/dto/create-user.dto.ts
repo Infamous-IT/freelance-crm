@@ -4,13 +4,12 @@ import {
   IsString,
   IsEmail,
   IsOptional,
-  IsUUID,
   IsBoolean,
-  IsDate,
   Length,
 } from 'class-validator';
+import { CreateUser } from '../interfaces/user.interface';
 
-export class CreateUserDto {
+export class CreateUserDto implements CreateUser {
   @ApiProperty({
     example: 'Nazar',
     description: 'Імʼя користувача',

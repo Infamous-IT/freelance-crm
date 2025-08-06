@@ -10,8 +10,9 @@ import {
   Length,
   Min,
 } from 'class-validator';
+import { CreateOrder } from '../interfaces/order.interface';
 
-export class CreateOrderDto {
+export class CreateOrderDto implements CreateOrder {
   @ApiProperty({
     example: 'Написати функцію відображення всіх замовлень',
     description: 'Назва замовлення',

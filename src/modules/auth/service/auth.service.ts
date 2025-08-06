@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { User } from 'src/modules/user/entities/user.entity';
+import { User, UserSecure } from 'src/modules/user/entities/user.entity';
 import { UserService } from 'src/modules/user/service/user.service';
 import { RegisterDto } from '../dto/register.dto';
 import { EmailService } from './email.service';
@@ -208,10 +208,25 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     const user = await this.userService.findByEmail(email);
-    user!.password = hashedPassword;
+    
+    if (!user) {
+      throw new NotFoundException('Користувача не знайдено');
+    }
+
+    const currentUser: UserSecure = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      country: user.country,
+      isEmailVerified: user.isEmailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role,
+    };
 
     logger.info(`Password updated for ${email}`);
-    return this.userService.update(user!.id, user!);
+    return this.userService.update(user.id, { password: hashedPassword }, currentUser);
   }
 
   async changePassword(
@@ -228,9 +243,20 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
+
+    const currentUser: UserSecure = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      country: user.country,
+      isEmailVerified: user.isEmailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      role: user.role,
+    };
 
     logger.info(`Password changed for user ${userId}`);
-    return this.userService.update(userId, user);
+    return this.userService.update(userId, { password: hashedPassword }, currentUser);
   }
 }

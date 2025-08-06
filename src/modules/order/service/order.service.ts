@@ -14,6 +14,7 @@ import { paginate } from 'src/common/pagination/paginator';
 import { OrderQueryDto } from '../dto/order-query.dto';
 import { OrderQuerySearchParamsDto } from '../dto/order-query-search-params.dto';
 import { OrderResponse } from '../responses/order.response';
+import { UserSecure } from 'src/modules/user/entities/user.entity';
 
 @Injectable()
 export class OrderService {
@@ -22,7 +23,7 @@ export class OrderService {
     @Inject('REDIS_CLIENT') private readonly redis: RedisClientType,
   ) {}
 
-  async create(createOrderDto: CreateOrderDto, userId: string): Promise<OrderResponse> {
+  async create(createOrderDto: CreateOrderDto, currentUser: UserSecure): Promise<OrderResponse> {
     try {
       const { startDate, endDate, ...otherFields } = createOrderDto;
       const formattedStartDate = this.convertDateToISO(startDate);
@@ -35,7 +36,7 @@ export class OrderService {
       const order = await this.orderRepository.create({
         data: {
           ...otherFields,
-          userId,
+          userId: currentUser.id,
           startDate: formattedStartDate,
           endDate: formattedEndDate,
         },
@@ -44,8 +45,8 @@ export class OrderService {
       await this.clearCache();
       logger.info(`Order created successfully with ID: ${order.id}`);
       return order;
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to create order' );
+    } catch (err: unknown) {
+      throw new UnprocessableEntityException('Failed to create order');
     }
   }
 
@@ -53,10 +54,9 @@ export class OrderService {
     param: OrderQuerySearchParamsDto,
     page: number,
     perPage: number,
-    orderQueryDto: OrderQueryDto
+    currentUser: UserSecure
   ): Promise<PaginatedOrders> {
     const { searchText, category, status, orderBy } = param;
-    const { userId, userRole } = orderQueryDto;
   
     const terms = searchText ?
       searchText
@@ -87,7 +87,7 @@ export class OrderService {
             }),
             ...(category && { category }),
             ...(status && { status }),
-            ...(userRole !== Role.ADMIN && { userId })
+            ...(currentUser.role !== Role.ADMIN && { userId: currentUser.id })
           },
           ...(orderBy ? {
             orderBy: {
@@ -116,7 +116,7 @@ export class OrderService {
     }
   }
 
-  async findOne(id: string, userId: string, userRole: Role): Promise<OrderWithRelationIncludes> {
+  async findOne(id: string, currentUser: UserSecure): Promise<OrderWithRelationIncludes> {
     logger.info(`Fetching order with ID: ${id}`);
     const order = await this.orderRepository.findUnique({
       where: { id },
@@ -128,8 +128,8 @@ export class OrderService {
       throw new NotFoundException(`Замовлення з ID ${id} не знайдено`);
     }
   
-    if (userRole !== Role.ADMIN && order.userId !== userId) {
-      logger.warn(`User ${userId} tried to access order ${id} owned by user ${order.userId}`);
+    if (currentUser.role !== Role.ADMIN && order.userId !== currentUser.id) {
+      logger.warn(`User ${currentUser.id} tried to access order ${id} owned by user ${order.userId}`);
       throw new ForbiddenException('Ви не маєте доступу до цього замовлення');
     }
   
@@ -140,8 +140,7 @@ export class OrderService {
   async update(
     id: string,
     updateOrderDto: UpdateOrderDto,
-    userRole: Role,
-    currentUserId: string
+    currentUser: UserSecure
   ): Promise<OrderResponse> {
     const order = await this.orderRepository.findUnique({
       where: { id },
@@ -154,9 +153,9 @@ export class OrderService {
       );
     }
 
-    if (userRole !== Role.ADMIN && order.userId !== currentUserId) {
+    if (currentUser.role !== Role.ADMIN && order.userId !== currentUser.id) {
       logger.error(
-        `User with ID: ${currentUserId} tried to update another user's order with ID: ${id}`,
+        `User with ID: ${currentUser.id} tried to update another user's order with ID: ${id}`,
       );
       throw new ForbiddenException(
         'Ви не можете редагувати це замовлення, тому що ви не створювали його!',
@@ -187,7 +186,7 @@ export class OrderService {
     return updatedOrder;
   }
 
-  async remove(id: string, userId: string, userRole: Role): Promise<OrderResponse> {
+  async remove(id: string, currentUser: UserSecure): Promise<OrderResponse> {
     const order = await this.orderRepository.findUnique({
       where: { id },
     });
@@ -199,9 +198,9 @@ export class OrderService {
       );
     }
 
-    if (userRole !== Role.ADMIN && order.userId !== userId) {
+    if (currentUser.role !== Role.ADMIN && order.userId !== currentUser.id) {
       logger.error(
-        `User with ID: ${userId} tried to delete another user's order with ID: ${id}`,
+        `User with ID: ${currentUser.id} tried to delete another user's order with ID: ${id}`,
       );
       throw new ForbiddenException(
         'Ви не можете видалити це замовлення, тому що ви не створювали його!',
