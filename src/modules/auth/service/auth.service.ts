@@ -8,25 +8,19 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { User, UserSecure } from 'src/modules/user/entities/user.entity';
+import { User } from 'src/modules/user/entities/user.entity';
 import { UserService } from 'src/modules/user/service/user.service';
 import { RegisterDto } from '../dtos/register.dto';
-import { EmailService } from './email.service';
 import { RedisClientType } from 'redis';
 import logger from 'src/common/logger/logger';
-import { DatabaseService } from 'src/database/service/database.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
-    private readonly emailService: EmailService,
-    private readonly databaseService: DatabaseService,
     @Inject('REDIS_CLIENT') private readonly redisClient: RedisClientType,
   ) {}
-
-  private forgotPasswordCodes = new Map<string, string>();
 
   generateTokens(user: User) {
     try {
@@ -156,139 +150,6 @@ export class AuthService {
     } catch ( err: unknown ) {
       logger.error('Error getting TTL for token', { error: err });
       throw new UnprocessableEntityException( 'Error getting TTL for token' );
-    }
-  }
-
-  async verifyEmail(email: string, code: string): Promise<boolean> {
-    const storedCode = this.forgotPasswordCodes.get(email);
-
-    if (!storedCode) {
-      logger.warn(`No verification code found for email ${email}`);
-      throw new NotFoundException('Code for accepting was not found!');
-    }
-
-    if (storedCode !== code) {
-      logger.warn(`Invalid verification code for email ${email}`);
-      throw new ConflictException('Code is not valid!');
-    }
-
-    this.forgotPasswordCodes.delete(email);
-    try {
-      const updatedUser = await this.databaseService.user.update({
-        where: { email },
-        data: { isEmailVerified: true },
-      });
-  
-      logger.info(`Email verified for ${email}`);
-      return !!updatedUser;
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to verify email' );
-    }
-  }
-
-  async sendVerificationCode(email: string): Promise<void> {
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      this.forgotPasswordCodes.set(email, code);
-
-      await this.emailService.sendEmail(
-        email,
-        'Verification code',
-        `Your verification code is: ${code}`,
-      );
-      logger.info(`Verification code sent to ${email}`);
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to send verificaiton code' );
-    }
-  }
-
-  async sendForgotPassword(email: string) {
-    const user = await this.userService.findByEmail(email);
-
-    if (!user) {
-      logger.warn(`User with email ${email} not found for password reset`);
-      throw new NotFoundException('User was not found!');
-    }
-
-    try {
-      const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-      this.forgotPasswordCodes.set(email, code);
-
-      await this.emailService.sendEmail(
-        email,
-        'Code for restore password',
-        `Your verification code: ${code}`,
-      );
-      logger.info(`Password reset code sent to ${email}`);
-      return { message: 'Code was send to your email.' };
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to send forgot password' );
-    }
-  }
-
-  async updateForgotPassword(email: string, code: string, newPassword: string) {
-    await this.verifyEmail(email, code);
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const user = await this.userService.findByEmail(email);
-    
-    if (!user) {
-      throw new NotFoundException('User was not found');
-    }
-
-    try {
-      const currentUser: UserSecure = {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        country: user.country,
-        isEmailVerified: user.isEmailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        role: user.role,
-      };
-  
-      logger.info(`Password updated for ${email}`);
-      return this.userService.update(user.id, { password: hashedPassword }, currentUser);
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to update forgot password' );
-    }
-  }
-
-  async changePassword(
-    userId: string,
-    oldPassword: string,
-    newPassword: string,
-  ) {
-    const user = await this.userService.findOneOrThrow(userId);
-
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) {
-      logger.warn(`Old password incorrect for user ${userId}`);
-      throw new UnauthorizedException('Старий пароль неправильний');
-    }
-
-    try {
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      const currentUser: UserSecure = {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        country: user.country,
-        isEmailVerified: user.isEmailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        role: user.role,
-      };
-  
-      logger.info(`Password changed for user ${userId}`);
-      return this.userService.update(userId, { password: hashedPassword }, currentUser);
-    } catch ( err: unknown ) {
-      throw new UnprocessableEntityException( 'Failed to change password' );
     }
   }
 }

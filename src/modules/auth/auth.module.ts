@@ -10,6 +10,10 @@ import { AuthService } from './service/auth.service';
 import { EmailService } from './service/email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
+import { EmailController } from './controller/email-verification.controller';
+import { PasswordController } from './controller/password.controller';
+import { PasswordService } from './service/password.service';
+import { EmailVerificationService } from './service/email-verification.service';
 
 @Module({
   imports: [
@@ -27,12 +31,20 @@ import { LocalStrategy } from './strategies/local.strategy';
     JwtAuthGuard,
     LocalAuthGuard,
     EmailService,
+    PasswordService,
+    EmailVerificationService,
     RolesGuard
   ],
-  controllers: [AuthController],
+  controllers: [
+    AuthController,
+    EmailController,
+    PasswordController
+  ],
   exports: [
     AuthService, 
-    EmailService, 
+    EmailService,
+    PasswordService,
+    EmailVerificationService, 
     RolesGuard, 
     JwtModule
   ],
