@@ -17,8 +17,6 @@ export interface CreateUser {
   email: string;
   password: string;
   isEmailVerified?: boolean | null;
-  createdAt: Date;
-  updatedAt: Date;
   role: Role;
 }
 

@@ -59,18 +59,6 @@ export class CreateUserDto implements CreateUser {
   isEmailVerified?: boolean | null;
 
   @ApiProperty({
-    example: '2025-01-01',
-    description: 'Дата створення користувача',
-  })
-  createdAt: Date;
-
-  @ApiProperty({
-    example: '2025-01-10',
-    description: 'Дата останнього оновлення користувача',
-  })
-  updatedAt: Date;
-
-  @ApiProperty({
     example: 'FREELANCER',
     description: 'Роль користувача',
     enum: Role,

@@ -178,7 +178,7 @@ export class OrderService {
 
     const updatedOrder = await this.orderRepository.update({
       where: { id },
-      data: updateOrderDto,
+      data: dataToUpdate,
     });
 
     await this.clearCache();
